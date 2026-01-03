@@ -4,6 +4,9 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 
 const AboutBrand: React.FC = () => {
+  const defaultImage = "/products/f6.jpg";
+  const hoverImage = "/products/f3.jpg"; // new hover image
+
   return (
     <section className="relative py-20 px-6 md:px-12 bg-gray-50 overflow-hidden">
       {/* Floating Background Shapes */}
@@ -19,23 +22,34 @@ const AboutBrand: React.FC = () => {
       />
 
       <div className="relative z-10 max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 items-center gap-12">
-        {/* Brand Image */}
-        <div className="w-full h-80 md:h-[400px] relative rounded-xl overflow-hidden shadow-lg">
+        {/* Brand Image with Hover Effect */}
+        <div className="w-full h-80 md:h-[400px] relative rounded-xl overflow-hidden shadow-lg group">
+          {/* Default Image */}
           <Image
-            src="/products/f6.jpg"
+            src={defaultImage}
             alt="About BuyRova Brand"
             fill
-            className="object-cover"
+            className="object-cover transition-opacity duration-500 group-hover:opacity-0"
+          />
+          {/* Hover Image */}
+          <Image
+            src={hoverImage}
+            alt="About BuyRova Brand Hover"
+            fill
+            className="object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
           />
         </div>
 
         {/* Text Content */}
         <div className="text-center md:text-left flex flex-col gap-6">
-          <h2 className="text-4xl font-bold text-gray-900">
+          <h2 className="text-4xl md:text-5xl font-bold text-gray-900">
             About Our Brand
           </h2>
           <p className="text-gray-700 text-lg md:text-xl leading-relaxed">
-            At <span className="font-semibold">BuyRova</span>, we craft luxury products blending timeless elegance with modern design. Each piece is curated to inspire, elevate your lifestyle, and provide unmatched quality.
+            At <span className="font-semibold">BuyRova</span>, we craft luxury
+            products blending timeless elegance with modern design. Each piece
+            is curated to inspire, elevate your lifestyle, and provide unmatched
+            quality.
           </p>
 
           {/* Optional Highlights */}
@@ -52,12 +66,13 @@ const AboutBrand: React.FC = () => {
           </div>
 
           {/* CTA Button */}
-          <a
+          <motion.a
             href="/shop"
+            whileHover={{ scale: 1.05, y: -2 }}
             className="mt-6 inline-block bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-xl font-semibold transition"
           >
             Explore Products
-          </a>
+          </motion.a>
         </div>
       </div>
     </section>

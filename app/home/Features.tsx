@@ -1,7 +1,15 @@
 "use client";
-import React from "react";
+
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+
+interface Variant {
+  color: string;
+  size: string[];
+  images: string[];
+  price?: number;
+}
 
 interface Product {
   _id: string;
@@ -9,111 +17,133 @@ interface Product {
   slug: string;
   price: number;
   oldPrice?: number;
-  images: string[];
+  images?: string[];
   sale?: boolean;
+  variants?: Variant[];
+  description?: string;
 }
 
-interface FeaturesProps {
-  products?: Product[];
-}
+const ShopPage: React.FC = () => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-const Features: React.FC<FeaturesProps> = ({ products }) => {
-  // Use internal dummy if none provided
-  const dummyProducts: Product[] = products || [
-    {
-      _id: "1",
-      title: "Summer T-shirt",
-      slug: "summer-t-shirt",
-      price: 499,
-      oldPrice: 599,
-      images: ["/products/f1.jpg", "/products/f1b.jpg"],
-      sale: true,
-    },
-    {
-      _id: "2",
-      title: "Modern Chair",
-      slug: "modern-chair",
-      price: 199,
-      images: ["/products/f2.jpg", "/products/f2b.jpg"],
-    },
-    {
-      _id: "3",
-      title: "Designer Table",
-      slug: "designer-table",
-      price: 299,
-      oldPrice: 349,
-      images: ["/products/f3.jpg", "/products/f3b.jpg"],
-      sale: true,
-    },
-    {
-      _id: "4",
-      title: "Classic Lamp",
-      slug: "classic-lamp",
-      price: 89,
-      images: ["/products/f4.jpg", "/products/f4b.jpg"],
-    },
-  ];
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch("/api/products");
+        const data = await res.json();
+
+        // Filter products with at least one image in images or variants
+        const filtered = data.filter(
+          (p: Product) =>
+            (p.images && p.images.length > 0) ||
+            (p.variants && p.variants[0]?.images?.length > 0)
+        );
+
+        setProducts(filtered);
+      } catch (err) {
+        console.error("Failed to fetch products:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const addToCart = (product: Product) => {
+    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+
+    const existing = cart.find((item: any) => item._id === product._id);
+
+    const image =
+      product.images?.[0] || product.variants?.[0]?.images?.[0] || "/products/placeholder.jpg";
+
+    if (existing) existing.quantity += 1;
+    else cart.push({ ...product, quantity: 1, image });
+
+    localStorage.setItem("cart", JSON.stringify(cart));
+    alert("Product added to cart 🛒");
+  };
+
+  if (loading) return <p className="text-center py-24">Loading products...</p>;
+  if (!products.length) return <p className="text-center py-24">No products found.</p>;
 
   return (
-    <section className="max-w-6xl mx-auto py-12 px-4">
-      <h2 className="text-3xl font-bold mb-6 text-gray-900">Featured Products</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {dummyProducts.map((product) => (
-          <div
-            key={product._id}
-            className="bg-white rounded-lg shadow-md hover:shadow-xl transition duration-300 relative group cursor-pointer overflow-hidden"
-          >
-            {/* Sale Badge */}
-            {product.sale && (
-              <span className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 text-xs font-bold rounded z-10">
-                SALE
-              </span>
-            )}
+    <div className="pt-24 px-6 md:px-12 bg-gray-50 min-h-screen">
+      <h1 className="text-4xl font-bold text-gray-900 mb-12 text-center">
+        Shop Collection
+      </h1>
 
-            {/* Image Swap on Hover */}
-            <div className="relative w-full h-48">
-              <Image
-                src={product.images[0]}
-                alt={product.title}
-                fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105 group-hover:opacity-0"
-              />
-              <Image
-                src={product.images[1] || product.images[0]}
-                alt={product.title}
-                fill
-                className="object-cover absolute top-0 left-0 transition-opacity duration-500 opacity-0 group-hover:opacity-100"
-              />
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+        {products.map((product) => {
+          const defaultImage =
+            product.images?.[0] || product.variants?.[0]?.images?.[0] || "/products/placeholder.jpg";
+          const hoverImage =
+            product.images?.[1] ||
+            product.variants?.[0]?.images?.[1] ||
+            defaultImage;
 
-            {/* Hover Buttons */}
-            <div className="absolute inset-0 bg-black bg-opacity-20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 z-10">
-              <Link
-                href={`/product/${product.slug}`}
-                className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded font-semibold text-sm"
-              >
-                Quick View
-              </Link>
-              <button className="bg-white hover:bg-gray-200 text-gray-900 px-3 py-2 rounded font-semibold text-sm">
-                Add to Cart
-              </button>
-            </div>
+          return (
+            <div
+              key={product._id}
+              className="group bg-white rounded-xl shadow-sm hover:shadow-xl overflow-hidden transition cursor-pointer relative"
+            >
+              {/* Sale Badge */}
+              {product.sale && (
+                <span className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 text-xs font-bold rounded z-10">
+                  SALE
+                </span>
+              )}
 
-            {/* Product Info */}
-            <div className="p-4 flex flex-col gap-1">
-              <h3 className="text-lg font-semibold text-gray-900">{product.title}</h3>
-              <div className="flex items-center gap-2">
-                <p className="text-gray-900 font-bold">${product.price}</p>
-                {product.oldPrice && (
-                  <p className="text-gray-500 line-through text-sm">${product.oldPrice}</p>
-                )}
+              {/* Product Images */}
+              <div className="relative w-full h-64 overflow-hidden">
+                <Image
+                  src={defaultImage}
+                  alt={product.title}
+                  fill
+                  className="object-cover transition-opacity duration-500 group-hover:opacity-0"
+                />
+                <Image
+                  src={hoverImage}
+                  alt={product.title}
+                  fill
+                  className="object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                />
+
+                {/* Hover Buttons */}
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 opacity-0 group-hover:opacity-100 transition">
+                  <Link
+                    href={`/product/${product.slug}`}
+                    className="bg-white text-gray-900 px-4 py-2 rounded-full text-sm font-semibold shadow hover:bg-gray-100"
+                  >
+                    View
+                  </Link>
+                  <button
+                    onClick={() => addToCart(product)}
+                    className="bg-yellow-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow hover:bg-yellow-600"
+                  >
+                    Add to Cart
+                  </button>
+                </div>
+              </div>
+
+              {/* Product Info */}
+              <div className="p-4 text-center">
+                <h3 className="text-lg font-semibold text-gray-900">{product.title}</h3>
+                <div className="flex justify-center items-center gap-2 mt-1">
+                  <span className="text-gray-900 font-bold">Rs {product.price}</span>
+                  {product.oldPrice && (
+                    <span className="text-gray-400 line-through text-sm">Rs {product.oldPrice}</span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 };
 
-export default Features;
+export default ShopPage;
