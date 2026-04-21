@@ -51,58 +51,19 @@ const ShopPage: React.FC = () => {
     fetchProducts();
   }, []);
 
-  // 📍 FILE: app/shop/page.tsx
+  const addToCart = (product: Product) => {
+    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
 
-  const addToCart = (product: any) => {
-    let cart: any[] = [];
+    const existing = cart.find((item: any) => item._id === product._id);
 
-    try {
-      const stored = localStorage.getItem("cart");
+    const image =
+      product.images?.[0] || product.variants?.[0]?.images?.[0] || "/products/placeholder.jpg";
 
-      const parsed = stored ? JSON.parse(stored) : [];
+    if (existing) existing.quantity += 1;
+    else cart.push({ ...product, quantity: 1, image });
 
-      // ✅ Ensure always array
-      cart = Array.isArray(parsed) ? parsed : [];
-    } catch (err) {
-      cart = [];
-    }
-
-    // 🔍 Check existing product
-    const existing = cart.find((item) => item._id === product._id);
-
-    let updatedCart;
-
-    if (existing) {
-      updatedCart = cart.map((item) =>
-        item._id === product._id
-          ? {
-            ...item,
-            quantity: (item.quantity || 1) + 1,
-          }
-          : item
-      );
-    } else {
-      updatedCart = [
-        ...cart,
-        {
-          _id: product._id,
-          title: product.title,
-          price: product.price,
-          quantity: 1,
-          image:
-            product.images?.[0] ||
-            product.variants?.[0]?.images?.[0] ||
-            "/products/placeholder.jpg",
-          slug: product.slug,
-        },
-      ];
-    }
-
-    // 💾 Save cart
-    localStorage.setItem("cart", JSON.stringify(updatedCart));
-
-    // 🔄 Notify other components (Navbar, Cart page)
-    window.dispatchEvent(new Event("cartUpdated"));
+    localStorage.setItem("cart", JSON.stringify(cart));
+    alert("Product added to cart 🛒");
   };
 
   if (loading) return <p className="text-center py-24">Loading products...</p>;

@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/products/route.ts
+import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Product from "@/models/Product";
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
-  await connectDB();
-  const resolvedParams = await params;
-  const product = await Product.findOne({ slug: resolvedParams.slug }).lean();
-
-  if (!product) {
-    return NextResponse.json({ error: "Product not found" }, { status: 404 });
+export async function GET() {
+  try {
+    await connectDB();
+    const products = await Product.find({}).lean();
+    return NextResponse.json(products);
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
-
-  return NextResponse.json(product);
 }

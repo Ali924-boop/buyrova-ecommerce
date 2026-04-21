@@ -36,8 +36,9 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, loading, initialDat
     { color: "", size: [], images: [], price: 0 },
   ]);
 
-  const handleVariantChange = <K extends keyof Variant>(index: number, field: K, value: Variant[K]) => {
+  const handleVariantChange = (index: number, field: string, value: any) => {
     const newVariants = [...variants];
+    // @ts-ignore
     newVariants[index][field] = value;
     setVariants(newVariants);
   };

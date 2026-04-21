@@ -54,7 +54,7 @@ const ShopPage: React.FC = () => {
   const addToCart = (product: Product) => {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
 
-    const existing = cart.find((item: { _id: string; quantity: number }) => item._id === product._id);
+    const existing = cart.find((item: any) => item._id === product._id);
 
     const image =
       product.images?.[0] || product.variants?.[0]?.images?.[0] || "/products/placeholder.jpg";

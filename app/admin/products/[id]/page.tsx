@@ -1,32 +1,29 @@
 // app/admin/products/[id]/page.tsx
 "use client"
 
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import ProductForm from "@/components/ProductForm";
 
 interface Params {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 const EditProductPage = ({ params }: Params) => {
-  const unwrappedParams = use(params);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [product, setProduct] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     const fetchProduct = async () => {
-      const res = await fetch(`/api/products/${unwrappedParams.id}`);
+      const res = await fetch(`/api/products/${params.id}`);
       const data = await res.json();
       setProduct(data);
     };
     fetchProduct();
-  }, [unwrappedParams.id]);
+  }, [params.id]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSubmit = async (data: any) => {
-    await fetch(`/api/products/${unwrappedParams.id}`, {
+    await fetch(`/api/products/${params.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
