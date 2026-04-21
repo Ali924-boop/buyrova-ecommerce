@@ -1,183 +1,178 @@
 "use client";
-import React, { useState } from "react";
 
-export interface Variant {
-  color: string;
-  size: string[];
+import React, { useState, ChangeEvent, FormEvent } from "react";
+
+interface ProductData {
+  title: string;
+  description: string;
+  price: number;
+  category: string;
   images: string[];
-  price?: number;
+  sale?: boolean;
 }
 
 interface ProductFormProps {
-  onSubmit: (product: {
-    title: string;
-    slug: string;
-    price: number;
-    variants: Variant[];
-    description?: string;
-  }) => void;
-  initialData?: {
-    title: string;
-    slug: string;
-    price: number;
-    variants: Variant[];
-    description?: string;
-  };
+  onSubmit: (data: ProductData) => void | Promise<void>;
+  isLoading?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  initialData?: any;
 }
 
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, initialData }) => {
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, isLoading = false, initialData }) => {
   const [title, setTitle] = useState(initialData?.title || "");
-  const [slug, setSlug] = useState(initialData?.slug || "");
-  const [price, setPrice] = useState(initialData?.price || 0);
   const [description, setDescription] = useState(initialData?.description || "");
-  const [variants, setVariants] = useState<Variant[]>(initialData?.variants || [
-    { color: "", size: [], images: [], price: 0 },
-  ]);
+  const [price, setPrice] = useState(initialData?.price?.toString() || "");
+  const [category, setCategory] = useState(initialData?.category || "");
+  const [images, setImages] = useState<File[]>([]);
+  const [sale, setSale] = useState(initialData?.sale || false);
 
-  // Add new variant
-  const addVariant = () => setVariants([...variants, { color: "", size: [], images: [], price: 0 }]);
-
-  // Remove variant
-  const removeVariant = (index: number) => {
-    const newVariants = variants.filter((_, i) => i !== index);
-    setVariants(newVariants);
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setImages(Array.from(e.target.files));
+    }
   };
 
-  // Update variant field
-  const handleVariantChange = (
-    index: number,
-    field: keyof Variant,
-    value: string | string[] | number
-  ) => {
-    const newVariants = [...variants];
-    newVariants[index][field] = value as any;
-    setVariants(newVariants);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    onSubmit({ title, slug, price, description, variants });
+
+    // Basic validation
+    if (!title || !description || !price || !category) {
+      alert("Please fill all required fields!");
+      return;
+    }
+
+    if (images.length === 0) {
+      alert("Please upload at least one image!");
+      return;
+    }
+
+    // Convert images to base64 (simplest way for demo; in production, use FormData or upload to storage)
+    const readImages = async () => {
+      const imagePromises = images.map(
+        (file) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+      );
+
+      try {
+        const imagesBase64 = await Promise.all(imagePromises);
+        onSubmit({
+          title,
+          description,
+          price: parseFloat(price),
+          category,
+          images: imagesBase64,
+          sale,
+        });
+
+        // Reset form
+        setTitle("");
+        setDescription("");
+        setPrice("");
+        setCategory("");
+        setImages([]);
+        setSale(false);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to process images");
+      }
+    };
+
+    readImages();
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-6 rounded shadow-md space-y-6">
-      <h2 className="text-2xl font-bold">Add New Product</h2>
-
-      <div>
-        <label className="block font-semibold mb-1">Title</label>
+    <form onSubmit={handleSubmit} className="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-md">
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Title</label>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full border px-3 py-2 rounded"
+          className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           required
         />
       </div>
 
-      <div>
-        <label className="block font-semibold mb-1">Slug</label>
-        <input
-          type="text"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          className="w-full border px-3 py-2 rounded"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block font-semibold mb-1">Price (Rs)</label>
-        <input
-          type="number"
-          value={price}
-          onChange={(e) => setPrice(Number(e.target.value))}
-          className="w-full border px-3 py-2 rounded"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block font-semibold mb-2">Description</label>
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Description</label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="w-full border px-3 py-2 rounded"
-          rows={3}
+          className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          rows={4}
+          required
         />
       </div>
 
-      <div className="space-y-4">
-        <h3 className="font-semibold">Variants</h3>
-        {variants.map((variant, index) => (
-          <div key={index} className="border p-3 rounded space-y-2 relative">
-            <button
-              type="button"
-              onClick={() => removeVariant(index)}
-              className="absolute top-2 right-2 text-red-500 font-bold"
-            >
-              X
-            </button>
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-medium mb-1">Price ($)</label>
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            step="0.01"
+            required
+          />
+        </div>
 
-            <div>
-              <label>Color</label>
-              <input
-                type="text"
-                value={variant.color}
-                onChange={(e) => handleVariantChange(index, "color", e.target.value)}
-                className="w-full border px-2 py-1 rounded"
-              />
-            </div>
+        <div>
+          <label className="block font-medium mb-1">Category</label>
+          <input
+            type="text"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+        </div>
+      </div>
 
-            <div>
-              <label>Sizes (comma separated)</label>
-              <input
-                type="text"
-                value={variant.size.join(",")}
-                onChange={(e) =>
-                  handleVariantChange(index, "size", e.target.value.split(",").map((s) => s.trim()))
-                }
-                className="w-full border px-2 py-1 rounded"
-              />
-            </div>
-
-            <div>
-              <label>Images (comma separated URLs)</label>
-              <input
-                type="text"
-                value={variant.images.join(",")}
-                onChange={(e) =>
-                  handleVariantChange(index, "images", e.target.value.split(",").map((s) => s.trim()))
-                }
-                className="w-full border px-2 py-1 rounded"
-              />
-            </div>
-
-            <div>
-              <label>Price (Rs)</label>
-              <input
-                type="number"
-                value={variant.price || 0}
-                onChange={(e) => handleVariantChange(index, "price", Number(e.target.value))}
-                className="w-full border px-2 py-1 rounded"
-              />
-            </div>
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Images</label>
+        <input
+          type="file"
+          multiple
+          accept="image/*"
+          onChange={handleImageChange}
+          className="w-full"
+          required
+        />
+        {images.length > 0 && (
+          <div className="flex flex-wrap mt-2 gap-2">
+            {images.map((img, idx) => (
+              <span key={idx} className="text-sm bg-gray-200 px-2 py-1 rounded">
+                {img.name}
+              </span>
+            ))}
           </div>
-        ))}
+        )}
+      </div>
 
-        <button
-          type="button"
-          onClick={addVariant}
-          className="bg-green-500 text-white px-4 py-2 rounded"
-        >
-          Add Variant
-        </button>
+      <div className="mb-6 flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={sale}
+          onChange={() => setSale(!sale)}
+          className="h-4 w-4"
+        />
+        <label className="font-medium">On Sale?</label>
       </div>
 
       <button
         type="submit"
-        className="bg-blue-500 text-white px-6 py-2 rounded font-semibold mt-4"
+        disabled={isLoading}
+        className={`w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition ${
+          isLoading ? "opacity-50 cursor-not-allowed" : ""
+        }`}
       >
-        Submit
+        {isLoading ? "Adding..." : "Add Product"}
       </button>
     </form>
   );

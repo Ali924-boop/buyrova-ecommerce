@@ -1,280 +1,334 @@
-/* eslint-disable react-hooks/immutability */
 "use client";
+
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { usePathname, useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  FiShoppingCart,
-  FiUser,
-  FiSearch,
-  FiMenu,
-  FiX,
-  FiChevronDown,
-} from "react-icons/fi";
+  ShoppingCart,
+  User,
+  Search,
+  Menu,
+  X,
+  ChevronDown,
+  Heart,
+  Sun,
+  Moon,
+} from "lucide-react";
 
-const Navbar: React.FC = () => {
-  const [showAccount, setShowAccount] = useState(false);
-  const [mobileMenu, setMobileMenu] = useState(false);
+const categories = [
+  { name: "Clothing", slug: "clothing" },
+  { name: "Furniture", slug: "furniture" },
+  { name: "Electronics", slug: "electronics" },
+  { name: "Accessories", slug: "accessories" },
+];
+
+export default function Navbar() {
+  const { data: session } = useSession();
+  const user = session?.user as any;
+
+  const pathname = usePathname();
+  const router = useRouter();
+
   const [showCategories, setShowCategories] = useState(false);
+  const [mobileCategories, setMobileCategories] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [cartCount, setCartCount] = useState(0);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [hidden, setHidden] = useState(false); // scroll hide/show
+  const [scrolled, setScrolled] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
 
+  const categoryRef = useRef<HTMLLIElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
-  const categoryRef = useRef<HTMLDivElement>(null);
-  let lastScroll = 0;
 
-  const categories = [
-    { name: "Clothing", slug: "clothing" },
-    { name: "Furniture", slug: "furniture" },
-    { name: "Electronics", slug: "electronics" },
-    { name: "Accessories", slug: "accessories" },
-  ];
-
-  // Check cart count
   useEffect(() => {
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    const totalQty = Array.isArray(cart)
-      ? cart.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0)
-      : 0;
-    setCartCount(totalQty);
+    const syncCart = () => {
+      const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+      const total = Array.isArray(cart)
+        ? cart.reduce((s, i) => s + (i.quantity || 1), 0)
+        : 0;
+      setCartCount(total);
+    };
+
+    syncCart();
+    window.addEventListener("storage", syncCart);
+    return () => window.removeEventListener("storage", syncCart);
   }, []);
 
-  // Check login status
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsLoggedIn(!!token);
+    const onScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Close dropdowns on outside click
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
-        setShowAccount(false);
-      }
-      if (categoryRef.current && !categoryRef.current.contains(event.target as Node)) {
+    const handler = (e: MouseEvent) => {
+      if (categoryRef.current && !categoryRef.current.contains(e.target as Node))
         setShowCategories(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
-  // Scroll hide/show
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScroll = window.scrollY;
-      if (currentScroll > lastScroll && currentScroll > 100) {
-        setHidden(true);
-      } else {
-        setHidden(false);
-      }
-      lastScroll = currentScroll;
+      if (accountRef.current && !accountRef.current.contains(e.target as Node))
+        setShowAccount(false);
     };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim() !== "") {
-      window.location.href = `/shop?search=${searchQuery.trim()}`;
-    }
+    if (!searchQuery.trim()) return;
+    router.push(`/shop?search=${searchQuery}`);
   };
 
+  const navLinks = [
+    { href: "/", label: "Home" },
+    { href: "/shop", label: "Shop" },
+  ];
+
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
+
   return (
-    <motion.nav
-      className={`bg-gray-50 shadow-lg sticky top-0 z-50 transition-transform duration-300 ${
-        hidden ? "-translate-y-28" : "translate-y-0"
-      }`}
-      initial={{ y: -50, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      <div className="max-w-7xl mx-auto flex justify-between items-center py-4 px-6">
-        {/* Logo */}
-        <div className="text-2xl font-bold text-gray-900">
-          <Link href="/">BuyRova</Link>
-        </div>
+    <>
+      {/* NAVBAR */}
+      <nav
+        className={`fixed top-0 left-0 w-full z-50 transition-all ${scrolled
+          ? "bg-neutral-950/95 border-b border-white/10 backdrop-blur-xl"
+          : "bg-neutral-950/80 backdrop-blur-md"
+          }`}
+      >
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-16 flex items-center justify-between">
 
-        {/* Desktop Menu */}
-        <ul className="hidden md:flex gap-6 text-gray-700 font-medium items-center">
-          <li>
-            <Link href="/" className="hover:text-yellow-500 transition">Home</Link>
-          </li>
-          <li>
-            <Link href="/shop" className="hover:text-yellow-500 transition">Shop</Link>
-          </li>
-
-          {/* Categories Dropdown */}
-          <li className="relative" ref={categoryRef}>
-            <button
-              onClick={() => setShowCategories(!showCategories)}
-              className="flex items-center gap-1 hover:text-yellow-500 transition"
-            >
-              Categories <FiChevronDown className={`transition-transform ${showCategories ? "rotate-180" : "rotate-0"}`} />
-            </button>
-
-            {showCategories && (
-              <div className="absolute top-8 left-0 bg-white shadow-lg rounded-lg py-2 w-48 flex flex-col z-50">
-                {categories.map((cat, idx) => (
-                  <Link
-                    key={idx}
-                    href={`/shop?category=${cat.slug}`}
-                    className="px-4 py-2 hover:bg-yellow-50 transition"
-                  >
-                    {cat.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </li>
-        </ul>
-
-        {/* Right Side */}
-        <div className="flex items-center gap-4">
-          {/* Search */}
-          <form onSubmit={handleSearch} className="relative hidden md:block">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-4 pr-10 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
-            />
-            <button
-              type="submit"
-              className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-700 hover:text-yellow-500 transition"
-            >
-              <FiSearch size={20} />
-            </button>
-          </form>
-
-          {/* Cart */}
-          <Link href="/cart" className="relative text-gray-700 hover:text-yellow-500 transition">
-            <FiShoppingCart size={24} />
-            {cartCount > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                {cartCount}
-              </span>
-            )}
+          {/* LOGO */}
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-yellow-500 rounded-lg flex items-center justify-center">
+              <span className="text-gray-900 font-black text-xs sm:text-sm">B</span>
+            </div>
+            <span className="font-bold text-white text-sm sm:text-lg">
+              BuyRova
+            </span>
           </Link>
 
-          {/* Account */}
-          {isLoggedIn ? (
-            <div className="relative hidden md:block" ref={accountRef}>
+          {/* DESKTOP NAV */}
+          <ul className="hidden md:flex items-center gap-3">
+            {navLinks.map((item) => (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={`px-3 py-2 rounded-lg text-sm ${isActive(item.href)
+                    ? "text-yellow-400 bg-yellow-500/10"
+                    : "text-gray-300 hover:text-white"
+                    }`}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+
+            {/* Categories */}
+            <li ref={categoryRef} className="relative">
               <button
-                onClick={() => setShowAccount(!showAccount)}
-                className="text-gray-700 hover:text-yellow-500 transition"
+                onClick={() => setShowCategories(prev => !prev)}
+                className="flex items-center gap-1 px-3 py-2 text-gray-300 text-sm"
               >
-                <FiUser size={24} />
+                Categories <ChevronDown size={14} />
               </button>
-              {showAccount && (
-                <div className="absolute right-0 mt-2 w-44 bg-white shadow-lg rounded-lg py-2 flex flex-col gap-2 z-50">
-                  <Link href="/account/profile" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Profile
-                  </Link>
-                  <Link href="/account/orders" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Orders
-                  </Link>
-                  <Link href="/account/wishlist" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Wishlist
-                  </Link>
-                  <Link href="/account/logout" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Logout
-                  </Link>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="hidden md:flex gap-2">
-              <Link href="/account/login" className="px-4 py-2 rounded-lg bg-yellow-500 text-white font-semibold hover:bg-yellow-600 transition">
-                Login
-              </Link>
-              <Link href="/account/signup" className="px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800 transition">
-                Signup
-              </Link>
-            </div>
-          )}
 
-          {/* Mobile Menu Button */}
-          <button
-            className="md:hidden text-gray-700 hover:text-yellow-500 transition"
-            onClick={() => setMobileMenu(!mobileMenu)}
-          >
-            {mobileMenu ? <FiX size={28} /> : <FiMenu size={28} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Menu */}
-      {mobileMenu && (
-        <div className="md:hidden bg-gray-50 shadow-lg px-6 py-4 flex flex-col gap-4">
-          {/* Search */}
-          <form onSubmit={handleSearch} className="relative w-full">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-4 pr-10 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
-            />
-            <button
-              type="submit"
-              className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-700 hover:text-yellow-500 transition"
-            >
-              <FiSearch size={20} />
-            </button>
-          </form>
-
-          {/* Links */}
-          <Link href="/" className="hover:text-yellow-500 transition">Home</Link>
-          <Link href="/shop" className="hover:text-yellow-500 transition">Shop</Link>
-
-          {/* Mobile Categories */}
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={() => setShowCategories(!showCategories)}
-              className="flex justify-between items-center w-full px-2 py-2 bg-gray-100 rounded-lg hover:bg-yellow-50 transition"
-            >
-              Categories <FiChevronDown className={`transition-transform ${showCategories ? "rotate-180" : "rotate-0"}`} />
-            </button>
-            {showCategories && (
-              <div className="flex flex-col pl-4 mt-2 gap-2">
-                {categories.map((cat, idx) => (
-                  <Link
-                    key={idx}
-                    href={`/shop?category=${cat.slug}`}
-                    className="hover:text-yellow-500 transition"
+              <AnimatePresence>
+                {showCategories && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute top-full left-0 w-44 sm:w-48 lg:w-30 bg-white border border-white/10 rounded-lg shadow-lg z-50"
                   >
-                    {cat.name}
-                  </Link>
-                ))}
+                    {categories.map((cat) => (
+                      <Link
+                        key={cat.slug}
+                        href={`/shop?category=${cat.slug}`}
+                        className="block px-3 py-2 text-sm hover:bg-gray-100 hover:rounded-lg"
+                      >
+                        {cat.name}
+                      </Link>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </li>
+          </ul>
+
+          {/* RIGHT SIDE */}
+          <div className="flex items-center gap-2 sm:gap-3">
+
+            {/* SEARCH */}
+            <form onSubmit={handleSearch} className="hidden md:block relative">
+              <Search
+                size={16}
+                className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search..."
+                className="bg-white/5 border border-white/10 text-sm pl-8 pr-3 py-1.5 rounded-lg text-white w-32 lg:w-48"
+              />
+            </form>
+
+            {/* WISHLIST */}
+            <Link href="/account/wishlist" className="text-white">
+              <Heart size={18} />
+            </Link>
+
+            {/* CART */}
+            <Link href="/cart" className="relative text-white">
+              <ShoppingCart size={18} />
+              {cartCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs w-4 h-4 flex items-center justify-center rounded-full">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+
+            {/* DARK MODE */}
+            <button onClick={() => setDarkMode(!darkMode)} className="text-white">
+              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            {/* LOGIN / SIGNUP */}
+            {!user && (
+              <div className="hidden md:flex items-center gap-2 lg:gap-3">
+
+                <Link
+                  href="/account/login"
+                  className=" 
+        bg-blue-300 text-black 
+        px-2 sm:px-3 py-1.5 
+        rounded-lg text-xs sm:text-sm 
+        font-semibold 
+        hover:bg-blue-500 
+        transition 
+        whitespace-nowrap
+      "
+                >
+                  Login
+                </Link>
+
+                <Link
+                  href="/account/signup"
+                  className="
+        bg-yellow-400 text-black 
+        px-2 sm:px-3 py-1.5 
+        rounded-lg text-xs sm:text-sm 
+        font-semibold 
+        hover:bg-yellow-300 
+        transition 
+        whitespace-nowrap
+      "
+                >
+                  Sign Up
+                </Link>
+
               </div>
             )}
+
+            {/* MOBILE BUTTON */}
+            <button className="md:hidden text-white" onClick={() => setMobileOpen(!mobileOpen)}>
+              {mobileOpen ? <X /> : <Menu />}
+            </button>
           </div>
-
-          {/* Account / Auth Links */}
-          {isLoggedIn ? (
-            <>
-              <Link href="/account/profile" className="hover:text-yellow-500 transition">Profile</Link>
-              <Link href="/account/orders" className="hover:text-yellow-500 transition">Orders</Link>
-              <Link href="/account/wishlist" className="hover:text-yellow-500 transition">Wishlist</Link>
-              <Link href="/account/logout" className="hover:text-yellow-500 transition">Logout</Link>
-            </>
-          ) : (
-            <>
-              <Link href="/account/login" className="hover:text-yellow-500 transition">Login</Link>
-              <Link href="/account/signup" className="hover:text-yellow-500 transition">Signup</Link>
-            </>
-          )}
-
-          <Link href="/cart" className="hover:text-yellow-500 transition">Cart</Link>
         </div>
-      )}
-    </motion.nav>
-  );
-};
+      </nav>
 
-export default Navbar;
+      {/* MOBILE MENU (ONLY RESPONSIVE FIXED) */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            className="fixed right-0 top-0 bottom-0 w-[50%] max-w-xs bg-gray-700 border-l border-white/10 z-50 p-4 overflow-y-auto"
+          >
+            <button onClick={() => setMobileOpen(false)} className="text-white mb-4">
+              <X />
+            </button>
+
+            <div className="flex flex-col gap-3 text-white text-sm">
+
+              <form onSubmit={handleSearch} className="mb-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 text-gray-300" size={16} />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search..."
+                    className="w-full bg-gray-800 text-white pl-9 py-2 rounded-lg"
+                  />
+                </div>
+              </form>
+
+              <Link href="/">Home</Link>
+              <Link href="/shop">Shop</Link>
+
+              {/* 📂 CATEGORIES */}
+              <div className="border-t border-white/10 pt-2">
+                <button
+                  onClick={() => setMobileCategories(prev => !prev)}
+                  className="flex items-center justify-between w-full py-2 text-left"
+                >
+                  <span>Categories</span>
+
+                  <ChevronDown
+                    size={18}
+                    className={`transition-transform duration-200 ${mobileCategories ? "rotate-180" : ""
+                      }`}
+                  />
+                </button>
+
+                {/* FIXED DROPDOWN */}
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${mobileCategories
+                    ? "max-h-60 opacity-100 translate-y-0"
+                    : "max-h-0 opacity-0 -translate-y-2"
+                    }`}
+                >
+                  <div className="flex flex-col pl-3 mt-2 space-y-2 pb-2">
+                    {categories.map((cat) => (
+                      <Link
+                        key={cat.slug}
+                        href={`/shop?category=${cat.slug}`}
+                        onClick={() => {
+                          setMobileOpen(false);
+                          setMobileCategories(false);
+                        }}
+                        className="text-gray-300 hover:text-yellow-400 text-sm"
+                      >
+                        {cat.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Link href="/wishlist">Wishlist</Link>
+              <Link href="/cart">Cart</Link>
+
+              {!user && (
+                <>
+                  <Link href="/login">Login</Link>
+                  <Link
+                    href="/signup"
+                    className="bg-yellow-500 text-black px-3 py-2 rounded-lg text-center"
+                  >
+                    Signup
+                  </Link>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}

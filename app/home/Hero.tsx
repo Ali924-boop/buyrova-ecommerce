@@ -69,7 +69,7 @@ const Hero = () => {
   }, []);
 
   return (
-    <section className="relative h-screen overflow-hidden">
+    <section className="relative h-screen overflow-hidden">npm run de
       {/* 🔹 BG IMAGE */}
       <div
         className="absolute inset-0 bg-cover bg-center"
