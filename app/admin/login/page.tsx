@@ -29,18 +29,22 @@ export default function AdminLoginPage() {
     setError("");
 
     const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+  email,
+  password,
+  redirect: false,
+});
+
+console.log("LOGIN RESULT:", result);
+
+    console.log(result);
 
     setLoading(false);
 
     if (result?.error) {
       setError("Invalid credentials or insufficient permissions.");
-      toast.error("❌ Invalid credentials!");
+      toast.error("Invalid credentials!");
     } else {
-      toast.success("✅ Successfully signed in!");
+      toast.success("Successfully signed in!");
 
       setTimeout(() => {
         router.push("/admin");
@@ -139,6 +143,7 @@ export default function AdminLoginPage() {
               )}
             </button>
           </form>
+          
 
           <p className="text-center text-xs text-gray-600 mt-6">
             Admin access only. Unauthorized access is prohibited.

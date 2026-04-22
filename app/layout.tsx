@@ -1,9 +1,11 @@
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,24 +19,25 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "BuyRova E-commerce",
-  description: "Luxury E-commerce experience with premium design",
+  description: "Luxury E-commerce experience",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
-        className={`bg-neutral-950 text-white ${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-neutral-950 text-white antialiased`}
       >
-       
         <Navbar />
         <main>{children}</main>
         <Footer />
-  
+
+        {/* ✅ IMPORTANT: Toast Container */}
+        <ToastContainer position="top-right" autoClose={3000} />
       </body>
     </html>
   );

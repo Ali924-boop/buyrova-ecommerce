@@ -1,31 +1,57 @@
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
-import User from "../models/User";
-import dotenv from "dotenv";
+require("dotenv").config({ path: ".env.local" });
 
-dotenv.config();
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+
+// Inline schema — avoids double connection issue
+const userSchema = new mongoose.Schema({
+  name:     { type: String, required: true },
+  email:    { type: String, required: true, unique: true },
+  password: { type: String },
+  image:    { type: String },
+  role:     { type: String, default: "user" },
+});
 
 async function createAdmin() {
-    await mongoose.connect(process.env.MONGODB_URI!);
+  try {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      console.error("❌  MONGODB_URI not found in .env.local");
+      process.exit(1);
+    }
 
-    const hashedPassword = await bcrypt.hash("password123", 10);
+    // Single connection only
+    await mongoose.connect(uri);
+    console.log("✅  Connected to MongoDB Atlas");
+
+    // Get model AFTER connecting
+    const User = mongoose.models.User || mongoose.model("User", userSchema);
 
     const existing = await User.findOne({ email: "admin@example.com" });
 
     if (existing) {
-        console.log("Admin already exists");
-        process.exit();
-    }
-
-    await User.create({
+      await User.updateOne(
+        { email: "admin@example.com" },
+        { $set: { role: "admin" } }
+      );
+      console.log("✅  Existing user promoted to admin.");
+    } else {
+      const hashedPassword = await bcrypt.hash("password123", 10);
+      await User.create({
         name: "Admin User",
         email: "admin@example.com",
         password: hashedPassword,
         role: "admin",
-    });
+      });
+      console.log("✅  Admin created successfully.");
+    }
 
-    console.log("✅ Admin created successfully");
+  } catch (err) {
+    console.error("❌  Error:", err);
+  } finally {
+    await mongoose.disconnect();
     process.exit();
+  }
 }
 
 createAdmin();

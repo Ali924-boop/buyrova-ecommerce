@@ -13,30 +13,35 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        await dbConnect();
+        try {
+          await dbConnect();
 
-        const user = await User.findOne({ email: credentials?.email });
+          if (!credentials?.email || !credentials?.password) return null;
 
-        if (!user) throw new Error("No user found");
+          const user = await User.findOne({ email: credentials.email });
 
-        const isValid = await bcrypt.compare(
-          credentials?.password || "",
-          user.password
-        );
+          if (!user) return null;
 
-        if (!isValid) throw new Error("Invalid password");
+          const isValid = await bcrypt.compare(
+            credentials.password,
+            user.password
+          );
 
-        // ✅ ADMIN CHECK (ADD THIS)
-        if (user.role !== "admin") {
-          throw new Error("Access denied: Admin only");
+          if (!isValid) return null;
+
+          // Admin role check
+          if (user.role !== "admin") return null;
+
+          return {
+            id: user._id.toString(),
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
+          return null;
         }
-
-        return {
-          id: user._id.toString(),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        };
       }
     }),
   ],

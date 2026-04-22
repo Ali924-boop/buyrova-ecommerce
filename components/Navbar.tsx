@@ -145,7 +145,7 @@ const Navbar: React.FC = () => {
             />
             <button
               type="submit"
-              className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-700 hover:text-yellow-500 transition"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-yellow-500 transition"
             >
               <FiSearch size={20} />
             </button>
