@@ -171,20 +171,42 @@ const Navbar: React.FC = () => {
                 <FiUser size={24} />
               </button>
               {showAccount && (
-                <div className="absolute right-0 mt-2 w-44 bg-white shadow-lg rounded-lg py-2 flex flex-col gap-2 z-50">
-                  <Link href="/account/profile" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Profile
-                  </Link>
-                  <Link href="/account/orders" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Orders
-                  </Link>
-                  <Link href="/account/wishlist" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Wishlist
-                  </Link>
-                  <Link href="/account/logout" className="px-4 py-2 hover:text-yellow-500 transition">
-                    Logout
-                  </Link>
-                </div>
+                <div className="absolute right-0 mt-2 w-56 bg-white text-black shadow-xl rounded-xl py-3 z-50">
+
+  {/* ACCOUNT SECTION */}
+  <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+    Account
+  </div>
+
+  <Link href="/account/profile" className="block px-4 py-2 hover:bg-gray-100 hover:text-yellow-500 transition">
+    Profile
+  </Link>
+
+  <Link href="/account/orders" className="block px-4 py-2 hover:bg-gray-100 hover:text-yellow-500 transition">
+    Orders
+  </Link>
+
+  <Link href="/account/wishlist" className="block px-4 py-2 hover:bg-gray-100 hover:text-yellow-500 transition">
+    Wishlist
+  </Link>
+
+  {/* DIVIDER */}
+  <div className="my-2 border-t border-gray-200"></div>
+
+  {/* ACTION SECTION */}
+  <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+    Actions
+  </div>
+
+  <Link href="/account/settings" className="block px-4 py-2 hover:bg-gray-100 hover:text-yellow-500 transition">
+    Settings
+  </Link>
+
+  <Link href="/account/login" className="block px-4 py-2 hover:bg-gray-100 hover:text-red-500 transition">
+    Logout
+  </Link>
+
+</div>
               )}
             </div>
           ) : (

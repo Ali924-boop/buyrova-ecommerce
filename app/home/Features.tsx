@@ -21,6 +21,7 @@ interface Product {
   sale?: boolean;
   variants?: Variant[];
   description?: string;
+  category?: string; // ✅ added
 }
 
 const ShopPage: React.FC = () => {
@@ -33,6 +34,13 @@ const ShopPage: React.FC = () => {
         const res = await fetch("/api/products");
         const data = await res.json();
 
+        // ✅ Safety check — API must return an array
+        if (!Array.isArray(data)) {
+          console.error("Expected array from /api/products, got:", data);
+          setProducts([]);
+          return;
+        }
+
         // Filter products with at least one image in images or variants
         const filtered = data.filter(
           (p: Product) =>
@@ -43,6 +51,7 @@ const ShopPage: React.FC = () => {
         setProducts(filtered);
       } catch (err) {
         console.error("Failed to fetch products:", err);
+        setProducts([]); // ✅ don't leave loading stuck
       } finally {
         setLoading(false);
       }
@@ -57,7 +66,9 @@ const ShopPage: React.FC = () => {
     const existing = cart.find((item: any) => item._id === product._id);
 
     const image =
-      product.images?.[0] || product.variants?.[0]?.images?.[0] || "/products/placeholder.jpg";
+      product.images?.[0] ||
+      product.variants?.[0]?.images?.[0] ||
+      "/products/placeholder.jpg";
 
     if (existing) existing.quantity += 1;
     else cart.push({ ...product, quantity: 1, image });
@@ -66,8 +77,17 @@ const ShopPage: React.FC = () => {
     alert("Product added to cart 🛒");
   };
 
-  if (loading) return <p className="text-center py-24">Loading products...</p>;
-  if (!products.length) return <p className="text-center py-24">No products found.</p>;
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+
+  if (!products.length)
+    return (
+      <p className="text-center py-24 text-gray-400">No products found.</p>
+    );
 
   return (
     <div className="pt-24 px-6 md:px-12 bg-gray-50 min-h-screen">
@@ -78,7 +98,9 @@ const ShopPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
         {products.map((product) => {
           const defaultImage =
-            product.images?.[0] || product.variants?.[0]?.images?.[0] || "/products/placeholder.jpg";
+            product.images?.[0] ||
+            product.variants?.[0]?.images?.[0] ||
+            "/products/placeholder.jpg";
           const hoverImage =
             product.images?.[1] ||
             product.variants?.[0]?.images?.[1] ||
@@ -93,6 +115,13 @@ const ShopPage: React.FC = () => {
               {product.sale && (
                 <span className="absolute top-3 left-3 bg-red-500 text-white px-2 py-1 text-xs font-bold rounded z-10">
                   SALE
+                </span>
+              )}
+
+              {/* Category Badge ✅ */}
+              {product.category && (
+                <span className="absolute top-3 right-3 bg-yellow-500 text-black px-2 py-1 text-xs font-bold rounded z-10 capitalize">
+                  {product.category}
                 </span>
               )}
 
@@ -130,11 +159,17 @@ const ShopPage: React.FC = () => {
 
               {/* Product Info */}
               <div className="p-4 text-center">
-                <h3 className="text-lg font-semibold text-gray-900">{product.title}</h3>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {product.title}
+                </h3>
                 <div className="flex justify-center items-center gap-2 mt-1">
-                  <span className="text-gray-900 font-bold">Rs {product.price}</span>
+                  <span className="text-gray-900 font-bold">
+                    Rs {product.price}
+                  </span>
                   {product.oldPrice && (
-                    <span className="text-gray-400 line-through text-sm">Rs {product.oldPrice}</span>
+                    <span className="text-gray-400 line-through text-sm">
+                      Rs {product.oldPrice}
+                    </span>
                   )}
                 </div>
               </div>

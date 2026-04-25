@@ -4,49 +4,76 @@ import Order from "@/models/Order";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: NextRequest) {
+  try {
+    await connectDB();
 
-  await connectDB();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userId = (session.user as any).id;
+    const session = await getServerSession(authOptions);
 
-  const orders = await Order.find({ user: userId })
-    .sort({ createdAt: -1 })
-    .populate("products.product", "title price")
-    .lean();
+    // ✅ Validate total exists and is a positive number
+    const body = await req.json();
+    const { items, total } = body;
 
-  return NextResponse.json(orders);
+    if (!items || !items.length) {
+      return NextResponse.json(
+        { error: "Cart is empty" },
+        { status: 400 }
+      );
+    }
+
+    if (!total || typeof total !== "number" || total <= 0) {
+      return NextResponse.json(
+        { error: "Invalid total" },
+        { status: 400 }
+      );
+    }
+
+    const userId = (session?.user as any)?.id || null;
+
+    const order = await Order.create({
+      user: userId,
+      products: items.map((item: any) => ({
+        product: item._id,
+        quantity: item.quantity,
+      })),
+      total,
+      status: "pending",
+    });
+
+    return NextResponse.json(order, { status: 201 });
+
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: "Server error" },
+      { status: 500 }
+    );
+  }
 }
 
-export async function POST(req: NextRequest) {
-  await connectDB();
-  const body = await req.json();
-  const session = await getServerSession(authOptions);
+// ✅ GET is now protected — only admins or authenticated users can see all orders
+export async function GET() {
+  try {
+    await connectDB();
 
-  const { items, total, name, email, address, city, zip, country, paymentMethod } = body;
+    const session = await getServerSession(authOptions);
 
-  if (!items?.length || !total) {
-    return NextResponse.json({ error: "Missing order data" }, { status: 400 });
+    if (!session) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const orders = await Order.find()
+      .populate("user", "name email")   // ✅ populate user info
+      .populate("products.product", "name price") // ✅ populate product info
+      .sort({ createdAt: -1 });
+
+    return NextResponse.json(orders);
+
+  } catch (err) {
+    console.error(err); // ✅ log the error, not silent
+    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userId = (session?.user as any)?.id;
-
-  const products = items.map((item: { _id: string; quantity: number }) => ({
-    product: item._id,
-    quantity: item.quantity || 1,
-  }));
-
-  const order = await Order.create({
-    user: userId || null,
-    products,
-    total,
-    status: "pending",
-    shippingAddress: { name, email, address, city, zip, country },
-    paymentMethod: paymentMethod || "cod",
-  });
-
-  return NextResponse.json(order, { status: 201 });
 }

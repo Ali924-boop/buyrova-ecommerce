@@ -11,7 +11,6 @@ const Hero = () => {
     let h = (canvas.height = window.innerHeight);
 
     const mouse = { x: -9999, y: -9999 };
-
     const colors = ["#facc15", "#fb923c", "#a855f7", "#ec4899", "#60a5fa"];
 
     const particles = Array.from({ length: 250 }, () => ({
@@ -23,15 +22,26 @@ const Hero = () => {
       color: colors[Math.floor(Math.random() * colors.length)],
     }));
 
-    window.addEventListener("mousemove", (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
-    });
+    };
 
-    window.addEventListener("mouseleave", () => {
+    const handleMouseLeave = () => {
       mouse.x = -9999;
       mouse.y = -9999;
-    });
+    };
+
+    const handleResize = () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseleave", handleMouseLeave);
+    window.addEventListener("resize", handleResize);
+
+    let animId: number;
 
     const animate = () => {
       ctx.clearRect(0, 0, w, h);
@@ -41,51 +51,52 @@ const Hero = () => {
         const dy = mouse.y - p.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // 🔥 Attraction radius
         if (distance < 150) {
           p.x += dx * 0.15;
           p.y += dy * 0.15;
         } else {
-          // 🟢 Return to original spread
           p.x += (p.baseX - p.x) * 0.02;
           p.y += (p.baseY - p.y) * 0.02;
         }
 
         ctx.beginPath();
         ctx.fillStyle = p.color;
-        ctx.arc(p.x, p.y, p.size, 2, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); // ✅ fixed: was 2 not 0
         ctx.fill();
       });
 
-      requestAnimationFrame(animate);
+      animId = requestAnimationFrame(animate);
     };
 
     animate();
 
-    window.addEventListener("resize", () => {
-      w = canvas.width = window.innerWidth;
-      h = canvas.height = window.innerHeight;
-    });
+    // ✅ Cleanup on unmount
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseleave", handleMouseLeave);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
 
   return (
-    <section className="relative h-screen overflow-hidden">npm run de
-      {/* 🔹 BG IMAGE */}
+    <section className="relative h-screen overflow-hidden">
+      {/* BG IMAGE */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: "url('/hero4.png')" }}
       />
 
-      {/* 🔹 Overlay */}
+      {/* Overlay */}
       <div className="absolute inset-0 bg-black/40" />
 
-      {/* 🔹 Particles */}
+      {/* Particles */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 z-10 pointer-events-none"
       />
 
-      {/* 🔹 Content */}
+      {/* Content */}
       <div className="relative z-20 flex h-full items-center justify-center text-center">
         <div>
           <h1 className="text-6xl md:text-8xl font-bold text-white">

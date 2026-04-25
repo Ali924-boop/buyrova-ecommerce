@@ -28,9 +28,7 @@ const AboutBrand: React.FC = () => {
           <Image
             src={defaultImage}
             alt="About BuyRova Brand"
-            fill
-            className="object-cover transition-opacity duration-500 group-hover:opacity-0"
-          />
+            fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" />
           {/* Hover Image */}
           <Image
             src={hoverImage}

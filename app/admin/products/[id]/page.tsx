@@ -1,39 +1,66 @@
-// app/admin/products/[id]/page.tsx
-"use client"
+"use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import ProductForm from "@/components/ProductForm";
+import { toast } from "react-toastify";
 
-interface Params {
-  params: { id: string };
-}
+const EditProductPage = () => {
+  const router  = useRouter();
+  const params  = useParams();
+  const id      = params?.id as string;
 
-const EditProductPage = ({ params }: Params) => {
   const [product, setProduct] = useState<any>(null);
-  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
     const fetchProduct = async () => {
-      const res = await fetch(`/api/products/${params.id}`);
-      const data = await res.json();
-      setProduct(data);
+      try {
+        const res = await fetch(`/api/products/${id}`);
+        if (!res.ok) { setError("Product not found or failed to load."); return; }
+        const data = await res.json();
+        setProduct(data);
+      } catch (err) {
+        setError("Something went wrong while fetching the product.");
+      } finally {
+        setLoading(false);
+      }
     };
     fetchProduct();
-  }, [params.id]);
+  }, [id]);
 
-  const handleSubmit = async (data: any) => {
-    await fetch(`/api/products/${params.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    router.push("/admin/products");
+  // ✅ FormData comes directly from ProductForm — send it to PUT route
+  const handleSubmit = async (formData: FormData) => {
+    try {
+      setSaving(true);
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        body: formData, // ✅ no Content-Type header — browser sets multipart boundary
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err?.error || "Update failed");
+        return;
+      }
+
+      toast.success("Product updated successfully");
+      router.push("/admin/products");
+    } catch (err) {
+      toast.error("Something went wrong");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (!product) return <p>Loading product...</p>;
+  if (loading) return <div className="p-6 text-gray-500">Loading product...</div>;
+  if (error)   return <div className="p-6 text-red-500">{error}</div>;
+  if (!product) return <div className="p-6 text-gray-500">Product not found.</div>;
 
-  return <ProductForm initialData={product} onSubmit={handleSubmit} />;
+  return <ProductForm initialData={product} onSubmit={handleSubmit} loading={saving} />;
 };
 
 export default EditProductPage;

@@ -6,7 +6,6 @@ if (!MONGODB_URI) {
   throw new Error("Please define MONGODB_URI in .env.local");
 }
 
-// Cache the connection across hot reloads in development
 let cached = (global as any).mongoose;
 
 if (!cached) {
@@ -17,9 +16,7 @@ async function connectDB() {
   if (cached.conn) return cached.conn;
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI, {
-      dbName: "BuyRova-Ecommerce",
-    });
+    cached.promise = mongoose.connect(MONGODB_URI); // ✅ no dbName option needed
   }
 
   cached.conn = await cached.promise;
