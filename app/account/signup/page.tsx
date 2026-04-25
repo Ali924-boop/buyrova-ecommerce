@@ -1,27 +1,69 @@
 "use client";
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "react-toastify";
 import { FcGoogle } from "react-icons/fc";
 import { FaFacebookF } from "react-icons/fa";
-import { FiUser, FiMail, FiLock } from "react-icons/fi";
+import { FiUser, FiMail, FiLock, FiEye, FiEyeOff } from "react-icons/fi";
 
 const Signup: React.FC = () => {
+  const router = useRouter();
   const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Signup data:", form);
-    alert("Account created successfully!");
+
+    if (!form.name || !form.email || !form.password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    if (form.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || "Signup failed");
+        return;
+      }
+
+      toast.success("Account created successfully! Please login 🎉");
+
+      setTimeout(() => {
+        router.push("/account/login");
+      }, 1500);
+
+    } catch (err) {
+      console.error("Signup error:", err);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <section className="min-h-screen flex items-center justify-center px-4 
+    <section className="min-h-screen flex items-center justify-center px-4
       bg-gray-100 dark:bg-gray-950 transition-colors duration-300">
 
-      <div className="w-full max-w-md rounded-3xl shadow-2xl p-8 border 
+      <div className="w-full max-w-md rounded-3xl shadow-2xl p-8 border
         bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 transition">
 
         {/* TITLE */}
@@ -40,9 +82,9 @@ const Signup: React.FC = () => {
               placeholder="Full Name"
               value={form.name}
               onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 rounded-lg border 
-                bg-white dark:bg-gray-800 
-                text-gray-900 dark:text-white 
+              className="w-full pl-10 pr-4 py-3 rounded-lg border
+                bg-white dark:bg-gray-800
+                text-gray-900 dark:text-white
                 border-gray-300 dark:border-gray-700
                 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
               required
@@ -58,9 +100,9 @@ const Signup: React.FC = () => {
               placeholder="Email Address"
               value={form.email}
               onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 rounded-lg border 
-                bg-white dark:bg-gray-800 
-                text-gray-900 dark:text-white 
+              className="w-full pl-10 pr-4 py-3 rounded-lg border
+                bg-white dark:bg-gray-800
+                text-gray-900 dark:text-white
                 border-gray-300 dark:border-gray-700
                 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
               required
@@ -71,27 +113,42 @@ const Signup: React.FC = () => {
           <div className="relative">
             <FiLock className="absolute top-3.5 left-3 text-gray-400 dark:text-gray-500" />
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               name="password"
-              placeholder="Password"
+              placeholder="Password (min 6 characters)"
               value={form.password}
               onChange={handleChange}
-              className="w-full pl-10 pr-4 py-3 rounded-lg border 
-                bg-white dark:bg-gray-800 
-                text-gray-900 dark:text-white 
+              className="w-full pl-10 pr-10 py-3 rounded-lg border
+                bg-white dark:bg-gray-800
+                text-gray-900 dark:text-white
                 border-gray-300 dark:border-gray-700
                 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute top-3.5 right-3 text-gray-400 hover:text-yellow-500 transition"
+            >
+              {showPassword ? <FiEyeOff /> : <FiEye />}
+            </button>
           </div>
 
-          {/* BUTTON */}
+          {/* SUBMIT */}
           <button
             type="submit"
-            className="w-full bg-yellow-500 hover:bg-yellow-400 
-              text-black font-semibold py-3 rounded-lg transition mt-2"
+            disabled={loading}
+            className="w-full bg-yellow-500 hover:bg-yellow-400
+              text-black font-semibold py-3 rounded-lg transition mt-2
+              disabled:opacity-60 disabled:cursor-not-allowed
+              flex items-center justify-center gap-2"
           >
-            Sign Up
+            {loading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                Creating Account...
+              </>
+            ) : "Sign Up"}
           </button>
         </form>
 
@@ -104,27 +161,21 @@ const Signup: React.FC = () => {
 
         {/* SOCIAL */}
         <div className="grid grid-cols-2 gap-4">
-
-          <button className="flex items-center justify-center gap-2 py-2 rounded-lg 
+          <button className="flex items-center justify-center gap-2 py-2 rounded-lg
             bg-blue-600 hover:bg-blue-700 text-white font-semibold transition">
             <FaFacebookF /> Facebook
           </button>
-
-          <button className="flex items-center justify-center gap-2 py-2 rounded-lg 
-            bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 
+          <button className="flex items-center justify-center gap-2 py-2 rounded-lg
+            bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700
             text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition font-semibold">
             <FcGoogle /> Google
           </button>
-
         </div>
 
-        {/* LOGIN */}
+        {/* LOGIN LINK */}
         <p className="mt-6 text-center text-gray-600 dark:text-gray-400">
           Already have an account?{" "}
-          <a
-            href="/account/login"
-            className="text-yellow-500 hover:text-yellow-600 font-semibold"
-          >
+          <a href="/account/login" className="text-yellow-500 hover:text-yellow-400 font-semibold">
             Login
           </a>
         </p>

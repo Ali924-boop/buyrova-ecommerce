@@ -2,24 +2,43 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { FiArrowLeft, FiUser, FiPackage } from "react-icons/fi";
+import {
+  FiUser,
+  FiPackage,
+  FiHeart,
+  FiSettings,
+  FiMessageSquare,
+  FiChevronRight,
+  FiArrowLeft,
+  FiShoppingBag,
+} from "react-icons/fi";
 
 interface Order {
   _id: string;
   createdAt: string;
   total: number;
+  status?: string;
 }
 
 interface User {
   name: string;
   email: string;
+  avatar?: string;
+  phone?: string;
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  delivered:  "bg-green-50 text-green-700",
+  shipped:    "bg-blue-50 text-blue-700",
+  processing: "bg-yellow-50 text-yellow-700",
+  cancelled:  "bg-red-50 text-red-600",
+};
+
 export default function AccountPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser]     = useState<User | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]   = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -27,38 +46,27 @@ export default function AccountPage() {
         setLoading(true);
         setError(null);
 
-        // ✅ BASE URL FIX (IMPORTANT)
         const baseUrl =
           typeof window !== "undefined"
             ? window.location.origin
             : "http://localhost:3000";
 
-        // 👤 USER API
-        const userRes = await fetch(`${baseUrl}/api/user`);
+        const [userRes, orderRes] = await Promise.all([
+          fetch(`${baseUrl}/api/user`),
+          fetch(`${baseUrl}/api/orders`),
+        ]);
 
-        if (!userRes.ok) {
-          throw new Error(`User API Error: ${userRes.status}`);
-        }
+        if (!userRes.ok)  throw new Error(`User API Error: ${userRes.status}`);
+        if (!orderRes.ok) throw new Error(`Orders API Error: ${orderRes.status}`);
 
-        const userData = await userRes.json();
-
-        // 📦 ORDERS API
-        const orderRes = await fetch(`${baseUrl}/api/orders`);
-
-        if (!orderRes.ok) {
-          throw new Error(`Orders API Error: ${orderRes.status}`);
-        }
-
+        const userData  = await userRes.json();
         const orderData = await orderRes.json();
 
-        // ✅ SAFE DATA SET
         setUser(userData?.user || null);
         setOrders(orderData?.orders || []);
-
       } catch (err: unknown) {
-        console.error("Account page error:", err);
-        const errorMessage = err instanceof Error ? err.message : "Something went wrong";
-        setError(errorMessage);
+        const msg = err instanceof Error ? err.message : "Something went wrong";
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -67,96 +75,246 @@ export default function AccountPage() {
     fetchData();
   }, []);
 
-  // 🔄 LOADING
+  // ── Loading ──────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-10 h-10 border-4 border-yellow-500/30 border-t-yellow-500 rounded-full animate-spin" />
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-yellow-200 border-t-yellow-500 rounded-full animate-spin" />
+          <p className="text-sm text-gray-400 font-medium">Loading your account…</p>
+        </div>
       </div>
     );
   }
 
-  // ❌ ERROR
+  // ── Error ────────────────────────────────────────────
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen text-center">
-        <p className="text-red-500 font-semibold mb-2">Error</p>
-        <p className="text-gray-500">{error}</p>
-
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 gap-4">
+        <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+          <FiShoppingBag size={24} className="text-red-400" />
+        </div>
+        <p className="text-gray-900 font-semibold">Something went wrong</p>
+        <p className="text-sm text-gray-400">{error}</p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-yellow-500 text-white rounded"
+          className="px-5 py-2.5 bg-yellow-500 text-white rounded-xl font-semibold text-sm hover:bg-yellow-600 transition"
         >
-          Retry
+          Try again
         </button>
       </div>
     );
   }
 
+  // ── Avatar initials ──────────────────────────────────
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "U";
+
+  const recentOrders = orders.slice(0, 3);
+
+  const quickLinks = [
+    { href: "/account/orders",   icon: <FiPackage size={18} />,       label: "My Orders",   desc: `${orders.length} order${orders.length !== 1 ? "s" : ""}` },
+    { href: "/account/wishlist", icon: <FiHeart size={18} />,         label: "Wishlist",    desc: "Saved items" },
+    { href: "/account/messages", icon: <FiMessageSquare size={18} />, label: "Messages",    desc: "Support & updates" },
+    { href: "/account/settings", icon: <FiSettings size={18} />,      label: "Settings",    desc: "Account & privacy" },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 sm:px-6 lg:px-12 py-24">
+    <div className="min-h-screen bg-gray-50">
 
-      {/* HEADER */}
-      <div className="max-w-5xl mx-auto flex items-center justify-between mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-          My Account
-        </h1>
-
-        <Link href="/" className="flex items-center gap-2 text-sm text-yellow-500">
-          <FiArrowLeft /> Back
+      {/* ── Breadcrumb ────────────────────────────── */}
+      <div className="max-w-5xl mx-auto px-4 pt-6 pb-2 flex items-center justify-between">
+        <p className="text-sm text-gray-400">
+          <Link href="/" className="hover:text-yellow-500 transition">Home</Link>
+          {" / "}
+          <span className="text-gray-700 font-medium">Account</span>
+        </p>
+        <Link href="/" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-yellow-500 transition font-medium">
+          <FiArrowLeft size={15} /> Back to shop
         </Link>
       </div>
 
-      <div className="max-w-5xl mx-auto grid gap-6">
+      <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
 
-        {/* PROFILE */}
-        <section className="bg-white dark:bg-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2 mb-4">
-            <FiUser className="text-yellow-500" />
-            <h2 className="text-xl font-semibold">Profile Info</h2>
+        {/* ── Hero card ─────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+
+            {/* Avatar */}
+            {user?.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.avatar}
+                alt={user.name}
+                className="w-20 h-20 rounded-full object-cover ring-4 ring-yellow-200 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-yellow-500 ring-4 ring-yellow-200 flex items-center justify-center text-white font-bold text-2xl select-none flex-shrink-0">
+                {initials}
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 truncate">
+                {user?.name || "Welcome back"}
+              </h1>
+              <p className="text-sm text-gray-400 mt-0.5 truncate">{user?.email}</p>
+              {user?.phone && (
+                <p className="text-sm text-gray-400 mt-0.5">{user.phone}</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-full px-3 py-1 font-semibold">
+                  BuyRova Member
+                </span>
+                <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-3 py-1 font-medium">
+                  {orders.length} order{orders.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+
+            {/* Edit link */}
+            <Link
+              href="/account/settings"
+              className="flex-shrink-0 px-4 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:border-yellow-400 hover:text-yellow-500 transition flex items-center gap-2"
+            >
+              <FiSettings size={15} /> Edit profile
+            </Link>
+          </div>
+        </div>
+
+        {/* ── Quick links ───────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {quickLinks.map(({ href, icon, label, desc }) => (
+            <Link
+              key={href}
+              href={href}
+              className="group bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3 hover:border-yellow-300 hover:shadow-md transition-all duration-200"
+            >
+              <div className="w-10 h-10 rounded-xl bg-yellow-50 text-yellow-500 flex items-center justify-center group-hover:bg-yellow-500 group-hover:text-white transition-colors duration-200">
+                {icon}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-900">{label}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+              </div>
+              <FiChevronRight size={14} className="text-gray-300 group-hover:text-yellow-400 transition-colors mt-auto self-end" />
+            </Link>
+          ))}
+        </div>
+
+        {/* ── Recent orders ─────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+
+          {/* Header */}
+          <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-yellow-50 text-yellow-500 flex items-center justify-center">
+                <FiPackage size={15} />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Recent Orders</h2>
+            </div>
+            {orders.length > 3 && (
+              <Link href="/account/orders" className="text-sm text-yellow-500 hover:text-yellow-600 font-semibold transition flex items-center gap-1">
+                View all <FiChevronRight size={13} />
+              </Link>
+            )}
           </div>
 
-          {user ? (
-            <div className="space-y-1">
-              <p><span className="font-medium">Name:</span> {user.name}</p>
-              <p><span className="font-medium">Email:</span> {user.email}</p>
+          {/* Order rows */}
+          {recentOrders.length > 0 ? (
+            <div className="divide-y divide-gray-50">
+              {recentOrders.map((order) => {
+                const status = order.status || "processing";
+                const statusStyle = STATUS_STYLES[status] || STATUS_STYLES.processing;
+                return (
+                  <Link
+                    key={order._id}
+                    href={`/account/orders`}
+                    className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition group"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <FiShoppingBag size={15} className="text-gray-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 font-mono">
+                          #{order._id.slice(-6).toUpperCase()}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(order.createdAt).toLocaleDateString("en-PK", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${statusStyle}`}>
+                        {status}
+                      </span>
+                      <p className="text-sm font-bold text-gray-900 min-w-[80px] text-right">
+                        Rs. {order.total.toLocaleString()}
+                      </p>
+                      <FiChevronRight size={15} className="text-gray-300 group-hover:text-yellow-400 transition-colors flex-shrink-0" />
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           ) : (
-            <p className="text-gray-500">No user found</p>
+            /* Empty state */
+            <div className="flex flex-col items-center justify-center py-14 gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-gray-50 flex items-center justify-center">
+                <FiShoppingBag size={22} className="text-gray-300" />
+              </div>
+              <p className="text-sm font-semibold text-gray-500">No orders yet</p>
+              <p className="text-xs text-gray-400">Your orders will appear here once you shop</p>
+              <Link
+                href="/shop"
+                className="mt-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-white text-sm font-semibold hover:bg-yellow-600 transition shadow-sm"
+              >
+                Start shopping
+              </Link>
+            </div>
           )}
-        </section>
+        </div>
 
-        {/* ORDERS */}
-        <section className="bg-white dark:bg-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2 mb-4">
-            <FiPackage className="text-yellow-500" />
-            <h2 className="text-xl font-semibold">Orders</h2>
+        {/* ── Profile info card ─────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-yellow-50 text-yellow-500 flex items-center justify-center">
+                <FiUser size={15} />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Profile Details</h2>
+            </div>
+            <Link
+              href="/account/settings"
+              className="text-sm text-yellow-500 hover:text-yellow-600 font-semibold transition flex items-center gap-1"
+            >
+              Edit <FiChevronRight size={13} />
+            </Link>
           </div>
 
-          {orders.length ? (
-            <div className="space-y-3">
-              {orders.map((o) => (
-                <div
-                  key={o._id}
-                  className="flex justify-between items-center p-3 border rounded dark:border-gray-800"
-                >
-                  <div>
-                    <p className="font-mono text-xs">#{o._id.slice(-6)}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(o.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              { label: "Full name", value: user?.name },
+              { label: "Email address", value: user?.email },
+              { label: "Phone", value: user?.phone || "—" },
+              { label: "Member since", value: "2024" },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+                <p className="text-sm font-medium text-gray-900 truncate">{value || "—"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
-                  <p className="font-semibold text-yellow-500">
-                    Rs. {o.total}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500">No orders found</p>
-          )}
-        </section>
       </div>
     </div>
   );

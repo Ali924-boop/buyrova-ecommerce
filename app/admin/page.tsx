@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   FiShoppingBag,
   FiUsers,
@@ -9,8 +11,8 @@ import {
   FiDollarSign,
   FiTrendingUp,
   FiArrowRight,
-  FiActivity,
   FiArrowLeft,
+  FiLogOut,
 } from "react-icons/fi";
 
 interface Stats {
@@ -37,6 +39,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -49,6 +52,11 @@ export default function AdminDashboard() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const handleLogout = async () => {
+    await signOut({ redirect: false });
+    router.push("/admin/login");
+  };
 
   if (loading) {
     return (
@@ -102,12 +110,23 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        <Link
-          href="/admin"
-          className="flex items-center gap-2 text-sm text-yellow-500 hover:text-yellow-400 transition"
-        >
-          <FiArrowLeft /> Back
-        </Link>
+        {/* ✅ Right side buttons */}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 text-sm text-yellow-500 hover:text-yellow-400 transition"
+          >
+            <FiArrowLeft /> Back
+          </Link>
+
+          {/* ✅ Logout Button */}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500 hover:text-white transition font-medium"
+          >
+            <FiLogOut /> Logout
+          </button>
+        </div>
       </div>
 
       {/* KPI CARDS */}
@@ -122,7 +141,6 @@ export default function AdminDashboard() {
             >
               <c.icon />
             </div>
-
             <div>
               <p className="text-xs text-gray-500 uppercase">{c.label}</p>
               <p className="text-xl font-bold">{c.value}</p>
@@ -139,16 +157,13 @@ export default function AdminDashboard() {
           <h2 className="flex items-center gap-2 font-semibold mb-5">
             <FiTrendingUp /> Revenue
           </h2>
-
           <div className="flex items-end gap-2 h-40">
             {stats?.dailyRevenue?.map((d, i) => (
               <div key={i} className="flex-1 flex flex-col items-center">
                 <div className="w-full h-40 flex items-end">
                   <div
                     className="w-full bg-yellow-500 rounded-t-md"
-                    style={{
-                      height: `${(d.revenue / maxRevenue) * 100}%`,
-                    }}
+                    style={{ height: `${(d.revenue / maxRevenue) * 100}%` }}
                   />
                 </div>
                 <span className="text-xs text-gray-500 mt-1">
@@ -162,7 +177,6 @@ export default function AdminDashboard() {
         {/* QUICK ACTIONS */}
         <div className="p-5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-3">
           <h2 className="font-semibold">Quick Actions</h2>
-
           {[
             { href: "/admin/products/add", label: "Add Product" },
             { href: "/admin/orders", label: "View Orders" },
@@ -182,16 +196,12 @@ export default function AdminDashboard() {
 
       {/* RECENT ORDERS */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
-
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 font-semibold">
           Recent Orders
         </div>
 
-        {/* EMPTY STATE */}
         {!stats?.recentOrders?.length ? (
-          <p className="p-6 text-center text-gray-500">
-            No orders found
-          </p>
+          <p className="p-6 text-center text-gray-500">No orders found</p>
         ) : (
           <>
             {/* DESKTOP */}
@@ -200,9 +210,7 @@ export default function AdminDashboard() {
                 <tbody>
                   {stats.recentOrders.map((o) => (
                     <tr key={o._id} className="border-b dark:border-gray-800">
-                      <td className="p-3 font-mono text-xs">
-                        #{o._id.slice(-6)}
-                      </td>
+                      <td className="p-3 font-mono text-xs">#{o._id.slice(-6)}</td>
                       <td>{o.user?.name}</td>
                       <td>${o.total}</td>
                       <td>
