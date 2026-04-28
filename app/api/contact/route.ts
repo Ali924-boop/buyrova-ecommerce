@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import Message from "@/models/Message";
+import connectDB                     from "@/lib/db";
+import Contact                       from "@/models/Contact";
 
 export async function POST(req: NextRequest) {
   await connectDB();
@@ -10,6 +10,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "All fields required" }, { status: 400 });
   }
 
-  const message = await Message.create({ name, email, subject, body });
-  return NextResponse.json(message, { status: 201 });
+  const contact = await Contact.create({ name, email, subject, body });
+  return NextResponse.json(contact, { status: 201 });
 }

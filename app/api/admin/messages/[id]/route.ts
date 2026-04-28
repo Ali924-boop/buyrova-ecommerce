@@ -1,60 +1,138 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import dbConnect from "@/lib/db";
+import { authOptions } from "@/lib/auth";
+import connectDB from "@/lib/db";
+import Thread from "@/models/Thread";
 import Message from "@/models/Message";
 
-// ── PATCH /api/admin/messages/[id] — mark read/unread ────────────────────────
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
+async function isAdmin(): Promise<boolean> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return false;
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
+  return adminEmails.includes(session.user.email);
+}
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || (session.user as any)?.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!(await isAdmin()))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    await dbConnect();
-    const body = await req.json();
-    const updated = await Message.findByIdAndUpdate(
-      params.id,
-      { $set: { read: body.read } },
-      { new: true }
+    await connectDB();
+    const { id } = await params;
+
+    const thread = await Thread.findById(id).lean();
+    if (!thread)
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+
+    const messages = await Message.find({ threadId: id })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    await Message.updateMany(
+      { threadId: id, from: "user", status: "sent" },
+      { $set: { status: "delivered" } }
     );
 
-    if (!updated) {
-      return NextResponse.json({ error: "Message not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(updated);
+    return NextResponse.json({ thread, messages });
   } catch (err) {
-    console.error("Message PATCH error:", err);
+    console.error("[GET /api/admin/messages/[id]]", err);
+    return NextResponse.json({ error: "Failed to fetch thread" }, { status: 500 });
+  }
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    if (!(await isAdmin()))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    await connectDB();
+    const { id } = await params;
+
+    const thread = await Thread.findById(id);
+    if (!thread)
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+
+    const { text } = await req.json();
+    if (!text?.trim())
+      return NextResponse.json({ error: "text is required" }, { status: 400 });
+
+    const message = await Message.create({
+      threadId: id,
+      text: text.trim(),
+      from: "support",
+      userId: thread.userId,
+      read: false,
+      status: "sent",
+    });
+
+    await Thread.findByIdAndUpdate(id, {
+      $set: { preview: text.trim() },
+      $inc: { unread: 1 },
+    }, { new: true });
+
+    return NextResponse.json({ message }, { status: 201 });
+  } catch (err) {
+    console.error("[POST /api/admin/messages/[id]]", err);
+    return NextResponse.json({ error: "Failed to send reply" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    if (!(await isAdmin()))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    await connectDB();
+    const { id } = await params;
+
+    const { read } = await req.json();
+    const status = read ? "seen" : "delivered";
+
+    await Message.updateMany(
+      { threadId: id, from: "user" },
+      { $set: { read, status } }
+    );
+
+    await Thread.findByIdAndUpdate(id, {
+      $set: { unread: read ? 0 : 1 },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[PATCH /api/admin/messages/[id]]", err);
     return NextResponse.json({ error: "Failed to update message" }, { status: 500 });
   }
 }
 
-// ── DELETE /api/admin/messages/[id] ──────────────────────────────────────────
 export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || (session.user as any)?.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!(await isAdmin()))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    await dbConnect();
-    const deleted = await Message.findByIdAndDelete(params.id);
+    await connectDB();
+    const { id } = await params;
 
-    if (!deleted) {
-      return NextResponse.json({ error: "Message not found" }, { status: 404 });
-    }
+    const thread = await Thread.findByIdAndDelete(id);
+    if (!thread)
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+
+    await Message.deleteMany({ threadId: id });
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Message DELETE error:", err);
-    return NextResponse.json({ error: "Failed to delete message" }, { status: 500 });
+    console.error("[DELETE /api/admin/messages/[id]]", err);
+    return NextResponse.json({ error: "Failed to delete thread" }, { status: 500 });
   }
 }

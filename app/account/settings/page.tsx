@@ -1,471 +1,808 @@
 "use client";
-import React, { useState, useEffect } from "react";
+
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import {
   FiUser,
   FiLock,
   FiBell,
   FiShield,
   FiTrash2,
-  FiChevronRight,
   FiCheck,
-  FiUpload,
   FiEye,
   FiEyeOff,
   FiAlertTriangle,
+  FiCamera,
+  FiMail,
+  FiPhone,
+  FiX,
 } from "react-icons/fi";
 
-interface UserData {
-  name?: string;
-  email?: string;
-  avatar?: string;
-  phone?: string;
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface UserAccount {
+  id: string;           // unique per user — key for per-user storage
+  name: string;
+  email: string;
+  phone: string;
+  avatar?: string;      // base64 data-URL or external URL
+  passwordHash?: string; // in a real app, never store plain text
+}
+
+interface UserSettings {
+  notifications: {
+    orderUpdates: boolean;
+    promotions: boolean;
+    newArrivals: boolean;
+    accountAlerts: boolean;
+    smsAlerts: boolean;
+  };
+  privacy: {
+    publicProfile: boolean;
+    shareData: boolean;
+    personalisedAds: boolean;
+  };
 }
 
 type Section = "profile" | "password" | "notifications" | "privacy" | "danger";
 
-const Toggle = ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
+// ─── Storage helpers (per-user, keyed by user.id) ─────────────────────────────
+
+const CURRENT_USER_KEY = "app_current_user_id";
+
+function getUserStorageKey(userId: string) {
+  return `app_user_${userId}`;
+}
+
+function getSettingsStorageKey(userId: string) {
+  return `app_settings_${userId}`;
+}
+
+function loadUser(userId: string): UserAccount | null {
+  try {
+    const raw = localStorage.getItem(getUserStorageKey(userId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveUser(user: UserAccount) {
+  localStorage.setItem(getUserStorageKey(user.id), JSON.stringify(user));
+  localStorage.setItem(CURRENT_USER_KEY, user.id);
+}
+
+function loadSettings(userId: string): UserSettings {
+  try {
+    const raw = localStorage.getItem(getSettingsStorageKey(userId));
+    if (raw) return JSON.parse(raw);
+  } catch { /* fall through */ }
+  return {
+    notifications: {
+      orderUpdates: true,
+      promotions: false,
+      newArrivals: true,
+      accountAlerts: true,
+      smsAlerts: false,
+    },
+    privacy: {
+      publicProfile: false,
+      shareData: false,
+      personalisedAds: true,
+    },
+  };
+}
+
+function saveSettings(userId: string, settings: UserSettings) {
+  localStorage.setItem(getSettingsStorageKey(userId), JSON.stringify(settings));
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+const Toggle = ({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: () => void;
+}) => (
   <button
+    type="button"
     onClick={onChange}
-    className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-1 ${
-      checked ? "bg-yellow-500" : "bg-gray-200"
+    aria-checked={checked}
+    role="switch"
+    className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-neutral-900 ${
+      checked
+        ? "bg-amber-500"
+        : "bg-stone-200 dark:bg-stone-700"
     }`}
   >
     <span
-      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
         checked ? "translate-x-5" : "translate-x-0"
       }`}
     />
   </button>
 );
 
-export default function SettingsPage() {
-  const [activeSection, setActiveSection] = useState<Section>("profile");
-  const [userData, setUserData] = useState<UserData>({});
-  const [saved, setSaved] = useState(false);
+const FieldInput = ({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+  suffix?: React.ReactNode;
+}) => (
+  <div className="flex flex-col gap-1.5">
+    <label className="text-[11px] font-semibold tracking-widest uppercase text-stone-400 dark:text-stone-500">
+      {label}
+    </label>
+    <div className="relative">
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-neutral-800 text-stone-900 dark:text-white placeholder:text-stone-300 dark:placeholder:text-stone-600 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none text-sm transition pr-10"
+      />
+      {suffix && (
+        <div className="absolute right-3 top-1/2 -translate-y-1/2">{suffix}</div>
+      )}
+    </div>
+  </div>
+);
 
-  // Profile
+const SectionCard = ({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) => (
+  <div className="bg-white dark:bg-neutral-900 border border-stone-100 dark:border-stone-800 rounded-2xl p-6 shadow-sm">
+    <div className="mb-6">
+      <h2 className="font-bold text-lg text-stone-900 dark:text-white">{title}</h2>
+      {subtitle && (
+        <p className="text-sm text-stone-400 dark:text-stone-500 mt-1">{subtitle}</p>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
+const SaveButton = ({
+  onClick,
+  saved,
+  label = "Save Changes",
+}: {
+  onClick: () => void;
+  saved: boolean;
+  label?: string;
+}) => (
+  <div className="flex items-center gap-3 mt-6">
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white rounded-xl font-semibold text-sm transition-all duration-150 shadow-sm shadow-amber-200 dark:shadow-amber-900/30"
+    >
+      {label}
+    </button>
+    {saved && (
+      <span className="flex items-center gap-1.5 text-emerald-500 text-sm font-medium animate-fade-in">
+        <FiCheck className="stroke-2" /> Saved
+      </span>
+    )}
+  </div>
+);
+
+const ToggleRow = ({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: () => void;
+}) => (
+  <div className="flex items-center justify-between py-4 border-b border-stone-100 dark:border-stone-800 last:border-0">
+    <div>
+      <p className="text-sm font-medium text-stone-800 dark:text-stone-200">{label}</p>
+      {description && (
+        <p className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">{description}</p>
+      )}
+    </div>
+    <Toggle checked={checked} onChange={onChange} />
+  </div>
+);
+
+// ─── Password strength ────────────────────────────────────────────────────────
+
+function passwordStrength(pw: string): { score: number; label: string; color: string } {
+  if (!pw) return { score: 0, label: "", color: "" };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  if (score <= 1) return { score, label: "Weak", color: "bg-red-500" };
+  if (score <= 3) return { score, label: "Fair", color: "bg-amber-400" };
+  return { score, label: "Strong", color: "bg-emerald-500" };
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function SettingsPage() {
+  const [user, setUser] = useState<UserAccount | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [activeSection, setActiveSection] = useState<Section>("profile");
+
+  // Profile fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState<string | undefined>();
 
-  // Password
+  // Password fields
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
-
-  // Notifications
-  const [notifs, setNotifs] = useState({
-    orderUpdates: true,
-    promotions: false,
-    newArrivals: true,
-    accountAlerts: true,
-    smsAlerts: false,
-  });
-
-  // Privacy
-  const [privacy, setPrivacy] = useState({
-    publicProfile: false,
-    shareData: false,
-    personalisedAds: true,
-  });
+  const [passError, setPassError] = useState("");
 
   // Danger zone
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
+  // Flash states
+  const [savedProfile, setSavedProfile] = useState(false);
+  const [savedPassword, setSavedPassword] = useState(false);
+  const [savedNotifs, setSavedNotifs] = useState(false);
+  const [savedPrivacy, setSavedPrivacy] = useState(false);
+
+  // ── Bootstrap: load the currently logged-in user ──────────────────────────
   useEffect(() => {
-    const user = localStorage.getItem("user");
-    if (user) {
-      try {
-        const parsed = JSON.parse(user);
-        setUserData(parsed);
-        setName(parsed.name || "");
-        setEmail(parsed.email || "");
-        setPhone(parsed.phone || "");
-      } catch {}
+    // In a real app, replace this with your auth session (e.g. NextAuth, Clerk, Supabase)
+    // Here we read from localStorage — each user is identified by their unique ID
+    const currentUserId = localStorage.getItem(CURRENT_USER_KEY);
+
+    if (currentUserId) {
+      const loaded = loadUser(currentUserId);
+      if (loaded) {
+        setUser(loaded);
+        setName(loaded.name);
+        setEmail(loaded.email);
+        setPhone(loaded.phone);
+        setAvatarPreview(loaded.avatar);
+        setSettings(loadSettings(currentUserId));
+        return;
+      }
     }
+
+    // ── Demo fallback: seed a guest user so the page is never empty ──────────
+    // Remove this block once you wire up real auth
+    const demoUser: UserAccount = {
+      id: "demo_user_001",
+      name: "Demo User",
+      email: "demo@example.com",
+      phone: "",
+    };
+    saveUser(demoUser);
+    setUser(demoUser);
+    setName(demoUser.name);
+    setEmail(demoUser.email);
+    setPhone(demoUser.phone);
+    setSettings(loadSettings(demoUser.id));
   }, []);
 
-  const flash = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
-
-  const handleSaveProfile = () => {
-    const updated = { ...userData, name, email, phone };
-    localStorage.setItem("user", JSON.stringify(updated));
-    setUserData(updated);
-    window.dispatchEvent(new Event("storage"));
-    flash();
+  const flash = (setter: (v: boolean) => void) => {
+    setter(true);
+    setTimeout(() => setter(false), 2500);
   };
 
+  // ── Profile save ───────────────────────────────────────────────────────────
+  const handleSaveProfile = useCallback(() => {
+    if (!user) return;
+    const updated: UserAccount = {
+      ...user,
+      name: name.trim() || user.name,
+      email: email.trim() || user.email,
+      phone: phone.trim(),
+      avatar: avatarPreview,
+    };
+    saveUser(updated);
+    setUser(updated);
+    flash(setSavedProfile);
+  }, [user, name, email, phone, avatarPreview]);
+
+  // ── Avatar upload ──────────────────────────────────────────────────────────
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const url = ev.target?.result as string;
-      const updated = { ...userData, avatar: url };
-      localStorage.setItem("user", JSON.stringify(updated));
-      setUserData(updated);
-      window.dispatchEvent(new Event("storage"));
-    };
+    reader.onload = () => setAvatarPreview(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+  // ── Password change ────────────────────────────────────────────────────────
+  const handleChangePassword = useCallback(() => {
+    setPassError("");
+    if (!currentPass) { setPassError("Enter your current password."); return; }
+    if (newPass.length < 8) { setPassError("New password must be at least 8 characters."); return; }
+    if (newPass !== confirmPass) { setPassError("Passwords do not match."); return; }
+    // In a real app, call your API here. We just flash success.
+    setCurrentPass(""); setNewPass(""); setConfirmPass("");
+    flash(setSavedPassword);
+  }, [currentPass, newPass, confirmPass]);
+
+  // ── Settings save ──────────────────────────────────────────────────────────
+  const handleSaveNotifs = useCallback(() => {
+    if (!user || !settings) return;
+    saveSettings(user.id, settings);
+    flash(setSavedNotifs);
+  }, [user, settings]);
+
+  const handleSavePrivacy = useCallback(() => {
+    if (!user || !settings) return;
+    saveSettings(user.id, settings);
+    flash(setSavedPrivacy);
+  }, [user, settings]);
+
+  // ── Toggle helpers ─────────────────────────────────────────────────────────
+  const toggleNotif = (key: keyof UserSettings["notifications"]) => {
+    setSettings((s) =>
+      s ? { ...s, notifications: { ...s.notifications, [key]: !s.notifications[key] } } : s
+    );
+  };
+
+  const togglePrivacy = (key: keyof UserSettings["privacy"]) => {
+    setSettings((s) =>
+      s ? { ...s, privacy: { ...s.privacy, [key]: !s.privacy[key] } } : s
+    );
+  };
+
+  // ── Delete account ─────────────────────────────────────────────────────────
+  const handleDeleteAccount = useCallback(() => {
+    if (!user) return;
+    localStorage.removeItem(getUserStorageKey(user.id));
+    localStorage.removeItem(getSettingsStorageKey(user.id));
+    localStorage.removeItem(CURRENT_USER_KEY);
+    // Redirect to home / sign-in
     window.location.href = "/";
-  };
+  }, [user]);
 
-  const handleDeleteAccount = () => {
-    if (deleteConfirm === "DELETE") {
-      localStorage.clear();
-      window.location.href = "/";
-    }
-  };
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const initials =
+    (user?.name || "U")
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
 
-  const initials = userData.name
-    ? userData.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : "U";
+  const pwStrength = passwordStrength(newPass);
 
-  const nav: { id: Section; label: string; icon: React.ReactNode; danger?: boolean }[] = [
-    { id: "profile", label: "Profile", icon: <FiUser size={16} /> },
-    { id: "password", label: "Password", icon: <FiLock size={16} /> },
-    { id: "notifications", label: "Notifications", icon: <FiBell size={16} /> },
-    { id: "privacy", label: "Privacy", icon: <FiShield size={16} /> },
-    { id: "danger", label: "Danger Zone", icon: <FiTrash2 size={16} />, danger: true },
+  const nav: {
+    id: Section;
+    label: string;
+    icon: React.ReactNode;
+    danger?: boolean;
+  }[] = [
+    { id: "profile", label: "Profile", icon: <FiUser size={15} /> },
+    { id: "password", label: "Password", icon: <FiLock size={15} /> },
+    { id: "notifications", label: "Notifications", icon: <FiBell size={15} /> },
+    { id: "privacy", label: "Privacy", icon: <FiShield size={15} /> },
+    { id: "danger", label: "Danger Zone", icon: <FiTrash2 size={15} />, danger: true },
   ];
 
+  if (!user || !settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-neutral-950">
+        <div className="w-6 h-6 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Breadcrumb */}
-      <div className="max-w-5xl mx-auto px-4 pt-6 pb-2">
-        <p className="text-sm text-gray-400">
-          <Link href="/" className="hover:text-yellow-500 transition">Home</Link>
-          {" / "}
-          <Link href="/account/profile" className="hover:text-yellow-500 transition">Account</Link>
-          {" / "}
-          <span className="text-gray-700 font-medium">Settings</span>
-        </p>
+    <div className="min-h-screen bg-stone-50 dark:bg-neutral-950 text-stone-900 dark:text-white">
+
+      {/* Top bar */}
+      <div className="border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-neutral-900">
+        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-2 text-sm text-stone-400">
+          <Link href="/" className="hover:text-amber-500 transition-colors">Home</Link>
+          <span>/</span>
+          <span className="text-stone-700 dark:text-stone-200 font-medium">Settings</span>
+        </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-6 flex flex-col md:flex-row gap-6">
+      <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col md:flex-row gap-6">
 
-        {/* ── Sidebar ── */}
-        <aside className="w-full md:w-64 flex-shrink-0">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* User card */}
-            <div className="px-5 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="relative">
-                {userData.avatar ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={userData.avatar} alt="avatar" className="w-11 h-11 rounded-full object-cover ring-2 ring-yellow-400" />
-                ) : (
-                  <div className="w-11 h-11 rounded-full bg-yellow-500 ring-2 ring-yellow-400 flex items-center justify-center text-white font-bold text-sm select-none">
-                    {initials}
-                  </div>
-                )}
-              </div>
-              <div className="overflow-hidden">
-                <p className="text-sm font-semibold text-gray-900 truncate">{userData.name || "User"}</p>
-                <p className="text-xs text-gray-400 truncate">{userData.email}</p>
+        {/* ── Sidebar ───────────────────────────────────────────────────────── */}
+        <aside className="w-full md:w-60 shrink-0">
+          <div className="bg-white dark:bg-neutral-900 border border-stone-100 dark:border-stone-800 rounded-2xl overflow-hidden shadow-sm">
+
+            {/* User identity */}
+            <div className="p-5 border-b border-stone-100 dark:border-stone-800">
+              <div className="flex items-center gap-3">
+                <div className="relative w-10 h-10 rounded-full shrink-0">
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt={user.name}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm select-none">
+                      {initials}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{user.name}</p>
+                  <p className="text-xs text-stone-400 truncate">{user.email}</p>
+                </div>
               </div>
             </div>
 
-            <nav className="py-2">
-              {nav.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveSection(item.id)}
-                  className={`w-full flex items-center gap-3 px-5 py-3 text-sm font-medium transition-all ${
-                    item.danger
-                      ? activeSection === item.id
-                        ? "bg-red-50 text-red-500 border-r-4 border-red-400"
-                        : "text-red-400 hover:bg-red-50 hover:text-red-500"
-                      : activeSection === item.id
-                      ? "bg-yellow-50 text-yellow-600 border-r-4 border-yellow-500"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                  }`}
-                >
-                  {item.icon}
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {activeSection === item.id && !item.danger && (
-                    <FiChevronRight size={13} className="text-yellow-400" />
-                  )}
-                </button>
-              ))}
+            {/* Nav */}
+            <nav>
+              {nav.map((item) => {
+                const active = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveSection(item.id)}
+                    className={`w-full flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors ${
+                      active
+                        ? item.danger
+                          ? "bg-red-50 dark:bg-red-900/20 text-red-500"
+                          : "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400"
+                        : item.danger
+                        ? "text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
+                        : "text-stone-500 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-neutral-800 hover:text-stone-800 dark:hover:text-white"
+                    }`}
+                  >
+                    <span className={active ? "opacity-100" : "opacity-60"}>{item.icon}</span>
+                    {item.label}
+                  </button>
+                );
+              })}
             </nav>
           </div>
         </aside>
 
-        {/* ── Main ── */}
-        <motion.main
-          key={activeSection}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="flex-1 min-w-0"
-        >
+        {/* ── Main content ──────────────────────────────────────────────────── */}
+        <main className="flex-1 min-w-0 flex flex-col gap-4">
 
-          {/* ── PROFILE ── */}
+          {/* PROFILE */}
           {activeSection === "profile" && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-6">Profile Information</h2>
-
+            <SectionCard
+              title="Profile"
+              subtitle="Your personal information shown on your account."
+            >
               {/* Avatar */}
-              <div className="flex items-center gap-5 mb-8">
+              <div className="flex items-center gap-5 mb-7">
                 <div className="relative">
-                  {userData.avatar ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={userData.avatar} alt="avatar" className="w-20 h-20 rounded-full object-cover ring-4 ring-yellow-200" />
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="Avatar"
+                      className="w-20 h-20 rounded-2xl object-cover"
+                    />
                   ) : (
-                    <div className="w-20 h-20 rounded-full bg-yellow-500 ring-4 ring-yellow-200 flex items-center justify-center text-white font-bold text-xl select-none">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white text-2xl font-bold select-none">
                       {initials}
                     </div>
                   )}
-                  <label className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-gray-900 text-white flex items-center justify-center cursor-pointer hover:bg-yellow-500 transition shadow">
-                    <FiUpload size={13} />
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                  <label className="absolute -bottom-2 -right-2 w-7 h-7 rounded-full bg-white dark:bg-neutral-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center cursor-pointer hover:bg-amber-50 transition shadow-sm">
+                    <FiCamera size={13} className="text-stone-500" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
                   </label>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-800">{userData.name || "User"}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">JPG, PNG or GIF · max 5 MB</p>
+                  <p className="text-sm font-semibold text-stone-800 dark:text-stone-200">
+                    Profile photo
+                  </p>
+                  <p className="text-xs text-stone-400 mt-0.5">
+                    JPG, PNG or WebP · Max 2 MB
+                  </p>
+                  {avatarPreview && (
+                    <button
+                      type="button"
+                      onClick={() => setAvatarPreview(undefined)}
+                      className="mt-1.5 text-xs text-red-400 hover:text-red-500 flex items-center gap-1"
+                    >
+                      <FiX size={11} /> Remove
+                    </button>
+                  )}
                 </div>
               </div>
 
+              {/* Fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {[
-                  { label: "Full name", value: name, set: setName, type: "text", placeholder: "Your name" },
-                  { label: "Email", value: email, set: setEmail, type: "email", placeholder: "you@email.com" },
-                  { label: "Phone", value: phone, set: setPhone, type: "tel", placeholder: "+92 300 0000000" },
-                ].map(({ label, value, set, type, placeholder }) => (
-                  <div key={label}>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
-                    <input
-                      type={type}
-                      value={value}
-                      onChange={(e) => set(e.target.value)}
-                      placeholder={placeholder}
-                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm transition bg-gray-50 focus:bg-white"
-                    />
-                  </div>
-                ))}
+                <FieldInput
+                  label="Full Name"
+                  value={name}
+                  onChange={setName}
+                  placeholder="Jane Doe"
+                />
+                <FieldInput
+                  label="Email Address"
+                  value={email}
+                  onChange={setEmail}
+                  type="email"
+                  placeholder="jane@example.com"
+                />
+                <FieldInput
+                  label="Phone Number"
+                  value={phone}
+                  onChange={setPhone}
+                  type="tel"
+                  placeholder="+1 555 000 0000"
+                />
               </div>
 
-              <div className="mt-7 flex items-center gap-3">
-                <button
-                  onClick={handleSaveProfile}
-                  className="px-6 py-2.5 rounded-xl bg-yellow-500 text-white font-semibold hover:bg-yellow-600 transition text-sm shadow-sm"
-                >
-                  Save changes
-                </button>
-                {saved && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="flex items-center gap-1.5 text-sm text-green-600 font-medium"
-                  >
-                    <FiCheck size={14} /> Saved!
-                  </motion.span>
-                )}
+              {/* Account ID (read-only) */}
+              <div className="mt-5 p-3 rounded-xl bg-stone-50 dark:bg-neutral-800 border border-stone-100 dark:border-stone-700 flex items-center gap-2">
+                <span className="text-xs text-stone-400 font-mono">User ID:</span>
+                <span className="text-xs text-stone-500 dark:text-stone-400 font-mono">{user.id}</span>
               </div>
-            </div>
+
+              <SaveButton onClick={handleSaveProfile} saved={savedProfile} />
+            </SectionCard>
           )}
 
-          {/* ── PASSWORD ── */}
+          {/* PASSWORD */}
           {activeSection === "password" && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Change Password</h2>
-              <p className="text-sm text-gray-400 mb-7">Use a strong password you don't use anywhere else.</p>
-
+            <SectionCard
+              title="Change Password"
+              subtitle="Use a strong password you don't use anywhere else."
+            >
               <div className="flex flex-col gap-5 max-w-md">
-                {[
-                  { label: "Current password", value: currentPass, set: setCurrentPass, show: showCurrent, toggle: () => setShowCurrent(!showCurrent) },
-                  { label: "New password", value: newPass, set: setNewPass, show: showNew, toggle: () => setShowNew(!showNew) },
-                  { label: "Confirm new password", value: confirmPass, set: setConfirmPass, show: showNew, toggle: () => setShowNew(!showNew) },
-                ].map(({ label, value, set, show, toggle }) => (
-                  <div key={label}>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
-                    <div className="relative">
-                      <input
-                        type={show ? "text" : "password"}
-                        value={value}
-                        onChange={(e) => set(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full px-4 py-2.5 pr-10 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm transition bg-gray-50 focus:bg-white"
-                      />
-                      <button type="button" onClick={toggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-                        {show ? <FiEyeOff size={15} /> : <FiEye size={15} />}
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                <FieldInput
+                  label="Current Password"
+                  value={currentPass}
+                  onChange={setCurrentPass}
+                  type={showCurrent ? "text" : "password"}
+                  placeholder="Your current password"
+                  suffix={
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrent((v) => !v)}
+                      className="text-stone-400 hover:text-stone-600"
+                    >
+                      {showCurrent ? <FiEyeOff size={15} /> : <FiEye size={15} />}
+                    </button>
+                  }
+                />
 
-                {newPass && confirmPass && newPass !== confirmPass && (
-                  <p className="text-xs text-red-500 font-medium -mt-2">Passwords don't match.</p>
-                )}
+                <FieldInput
+                  label="New Password"
+                  value={newPass}
+                  onChange={setNewPass}
+                  type={showNew ? "text" : "password"}
+                  placeholder="Min. 8 characters"
+                  suffix={
+                    <button
+                      type="button"
+                      onClick={() => setShowNew((v) => !v)}
+                      className="text-stone-400 hover:text-stone-600"
+                    >
+                      {showNew ? <FiEyeOff size={15} /> : <FiEye size={15} />}
+                    </button>
+                  }
+                />
 
-                {/* Strength bar */}
+                {/* Strength meter */}
                 {newPass && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1.5">
-                      Strength:{" "}
-                      <span className={newPass.length >= 12 ? "text-green-600 font-semibold" : newPass.length >= 8 ? "text-yellow-600 font-semibold" : "text-red-500 font-semibold"}>
-                        {newPass.length >= 12 ? "Strong" : newPass.length >= 8 ? "Medium" : "Weak"}
-                      </span>
-                    </p>
-                    <div className="flex gap-1.5">
-                      {[3, 6, 9, 12].map((threshold) => (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-1 h-1.5">
+                      {[1, 2, 3, 4, 5].map((i) => (
                         <div
-                          key={threshold}
-                          className={`h-1 flex-1 rounded-full transition-colors ${
-                            newPass.length >= threshold
-                              ? newPass.length >= 12 ? "bg-green-500" : "bg-yellow-400"
-                              : "bg-gray-200"
+                          key={i}
+                          className={`flex-1 rounded-full transition-all duration-300 ${
+                            i <= pwStrength.score
+                              ? pwStrength.color
+                              : "bg-stone-200 dark:bg-stone-700"
                           }`}
                         />
                       ))}
                     </div>
+                    <p className="text-xs text-stone-400">
+                      Strength:{" "}
+                      <span
+                        className={
+                          pwStrength.score <= 1
+                            ? "text-red-500"
+                            : pwStrength.score <= 3
+                            ? "text-amber-500"
+                            : "text-emerald-500"
+                        }
+                      >
+                        {pwStrength.label}
+                      </span>
+                    </p>
                   </div>
                 )}
 
-                <button
-                  disabled={!currentPass || !newPass || newPass !== confirmPass}
-                  className="px-6 py-2.5 rounded-xl bg-yellow-500 text-white font-semibold hover:bg-yellow-600 disabled:opacity-40 disabled:cursor-not-allowed transition text-sm shadow-sm w-fit"
-                >
-                  Update password
-                </button>
+                <FieldInput
+                  label="Confirm New Password"
+                  value={confirmPass}
+                  onChange={setConfirmPass}
+                  type="password"
+                  placeholder="Repeat new password"
+                />
+
+                {passError && (
+                  <p className="text-sm text-red-500 flex items-center gap-2">
+                    <FiAlertTriangle size={13} />
+                    {passError}
+                  </p>
+                )}
               </div>
-            </div>
+
+              <SaveButton
+                onClick={handleChangePassword}
+                saved={savedPassword}
+                label="Update Password"
+              />
+            </SectionCard>
           )}
 
-          {/* ── NOTIFICATIONS ── */}
+          {/* NOTIFICATIONS */}
           {activeSection === "notifications" && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Notification Preferences</h2>
-              <p className="text-sm text-gray-400 mb-7">Choose what you hear from us and how.</p>
-
-              <div className="divide-y divide-gray-100">
-                {(
-                  [
-                    { key: "orderUpdates", title: "Order updates", desc: "Shipping, delivery and order confirmations" },
-                    { key: "promotions", title: "Promotions & deals", desc: "Sales, coupons and exclusive offers" },
-                    { key: "newArrivals", title: "New arrivals", desc: "Latest products in categories you follow" },
-                    { key: "accountAlerts", title: "Account alerts", desc: "Login activity and password changes" },
-                    { key: "smsAlerts", title: "SMS alerts", desc: "Text messages for urgent updates" },
-                  ] as { key: keyof typeof notifs; title: string; desc: string }[]
-                ).map(({ key, title, desc }) => (
-                  <div key={key} className="flex items-center justify-between py-4">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
-                    </div>
-                    <Toggle checked={notifs[key]} onChange={() => setNotifs((p) => ({ ...p, [key]: !p[key] }))} />
-                  </div>
-                ))}
+            <SectionCard
+              title="Notifications"
+              subtitle="Choose what you want to be notified about."
+            >
+              <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                <ToggleRow
+                  label="Order Updates"
+                  description="Shipping, delivery, and order status changes."
+                  checked={settings.notifications.orderUpdates}
+                  onChange={() => toggleNotif("orderUpdates")}
+                />
+                <ToggleRow
+                  label="Promotions & Offers"
+                  description="Discounts, sale events, and exclusive deals."
+                  checked={settings.notifications.promotions}
+                  onChange={() => toggleNotif("promotions")}
+                />
+                <ToggleRow
+                  label="New Arrivals"
+                  description="Be the first to know about new products."
+                  checked={settings.notifications.newArrivals}
+                  onChange={() => toggleNotif("newArrivals")}
+                />
+                <ToggleRow
+                  label="Account Alerts"
+                  description="Sign-ins, password changes, and security events."
+                  checked={settings.notifications.accountAlerts}
+                  onChange={() => toggleNotif("accountAlerts")}
+                />
+                <ToggleRow
+                  label="SMS Alerts"
+                  description="Receive notifications via text message."
+                  checked={settings.notifications.smsAlerts}
+                  onChange={() => toggleNotif("smsAlerts")}
+                />
               </div>
 
-              <button
-                onClick={flash}
-                className="mt-6 px-6 py-2.5 rounded-xl bg-yellow-500 text-white font-semibold hover:bg-yellow-600 transition text-sm shadow-sm flex items-center gap-2"
-              >
-                {saved ? <><FiCheck size={14} /> Saved!</> : "Save preferences"}
-              </button>
-            </div>
+              <SaveButton
+                onClick={handleSaveNotifs}
+                saved={savedNotifs}
+                label="Save Preferences"
+              />
+            </SectionCard>
           )}
 
-          {/* ── PRIVACY ── */}
+          {/* PRIVACY */}
           {activeSection === "privacy" && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Privacy Settings</h2>
-              <p className="text-sm text-gray-400 mb-7">Control how your data is used and who can see you.</p>
-
-              <div className="divide-y divide-gray-100">
-                {(
-                  [
-                    { key: "publicProfile", title: "Public profile", desc: "Let others see your reviews and wishlist" },
-                    { key: "shareData", title: "Share usage data", desc: "Help us improve with anonymous analytics" },
-                    { key: "personalisedAds", title: "Personalised ads", desc: "See ads based on your shopping behaviour" },
-                  ] as { key: keyof typeof privacy; title: string; desc: string }[]
-                ).map(({ key, title, desc }) => (
-                  <div key={key} className="flex items-center justify-between py-4">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
-                    </div>
-                    <Toggle checked={privacy[key]} onChange={() => setPrivacy((p) => ({ ...p, [key]: !p[key] }))} />
-                  </div>
-                ))}
+            <SectionCard
+              title="Privacy"
+              subtitle="Control how your data is used and what others can see."
+            >
+              <div className="divide-y divide-stone-100 dark:divide-stone-800">
+                <ToggleRow
+                  label="Public Profile"
+                  description="Allow others to view your profile and order history."
+                  checked={settings.privacy.publicProfile}
+                  onChange={() => togglePrivacy("publicProfile")}
+                />
+                <ToggleRow
+                  label="Share Usage Data"
+                  description="Help improve the platform by sharing anonymous usage data."
+                  checked={settings.privacy.shareData}
+                  onChange={() => togglePrivacy("shareData")}
+                />
+                <ToggleRow
+                  label="Personalised Ads"
+                  description="See ads tailored to your interests and browsing activity."
+                  checked={settings.privacy.personalisedAds}
+                  onChange={() => togglePrivacy("personalisedAds")}
+                />
               </div>
 
-              <div className="mt-5 p-4 rounded-xl bg-gray-50 border border-gray-200">
-                <p className="text-xs text-gray-500">
-                  You can request a full export of your data or ask us to delete it permanently.{" "}
-                  <Link href="/account/messages" className="text-yellow-600 hover:underline">Contact support →</Link>
+              <SaveButton
+                onClick={handleSavePrivacy}
+                saved={savedPrivacy}
+                label="Save Privacy Settings"
+              />
+            </SectionCard>
+          )}
+
+          {/* DANGER ZONE */}
+          {activeSection === "danger" && (
+            <div className="bg-white dark:bg-neutral-900 border border-red-200 dark:border-red-900/50 rounded-2xl p-6 shadow-sm">
+              <div className="mb-6">
+                <h2 className="font-bold text-lg text-stone-900 dark:text-white">
+                  Danger Zone
+                </h2>
+                <p className="text-sm text-stone-400 dark:text-stone-500 mt-1">
+                  Irreversible actions. Please proceed with caution.
                 </p>
               </div>
 
-              <button
-                onClick={flash}
-                className="mt-5 px-6 py-2.5 rounded-xl bg-yellow-500 text-white font-semibold hover:bg-yellow-600 transition text-sm shadow-sm flex items-center gap-2"
-              >
-                {saved ? <><FiCheck size={14} /> Saved!</> : "Save privacy settings"}
-              </button>
-            </div>
-          )}
-
-          {/* ── DANGER ZONE ── */}
-          {activeSection === "danger" && (
-            <div className="space-y-5">
-              {/* Sign out all */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                <h3 className="text-sm font-bold text-gray-900 mb-1">Sign out everywhere</h3>
-                <p className="text-xs text-gray-400 mb-4">Log out of all active sessions on all your devices.</p>
-                <button
-                  onClick={handleLogout}
-                  className="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition text-sm"
-                >
-                  Sign out all devices
-                </button>
-              </div>
-
-              {/* Delete account */}
-              <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
-                <div className="flex items-start gap-3 mb-5">
-                  <FiAlertTriangle size={19} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl p-5">
+                <div className="flex items-start gap-3 mb-4">
+                  <FiAlertTriangle className="text-red-500 mt-0.5 shrink-0" size={18} />
                   <div>
-                    <h3 className="text-sm font-bold text-red-600 mb-1">Delete account</h3>
-                    <p className="text-xs text-gray-400 leading-relaxed">
-                      Permanently deletes your account, orders, saved addresses, and all data. This cannot be undone.
+                    <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                      Delete your account
+                    </p>
+                    <p className="text-xs text-red-500/80 dark:text-red-500/70 mt-1">
+                      This will permanently delete your account, all your orders, saved
+                      addresses, and personal data. This action cannot be undone.
                     </p>
                   </div>
                 </div>
-                <div className="mb-5">
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">
-                    Type <span className="text-red-500 font-bold">DELETE</span> to confirm
+
+                <div className="flex flex-col gap-1.5 mb-4">
+                  <label className="text-xs font-semibold tracking-widest uppercase text-stone-400">
+                    Type{" "}
+                    <span className="font-mono text-red-500 tracking-normal">
+                      DELETE
+                    </span>{" "}
+                    to confirm
                   </label>
                   <input
-                    type="text"
                     value={deleteConfirm}
                     onChange={(e) => setDeleteConfirm(e.target.value)}
                     placeholder="DELETE"
-                    className="w-full max-w-xs px-4 py-2.5 rounded-xl border border-red-200 focus:outline-none focus:ring-2 focus:ring-red-300 text-sm transition"
+                    className="w-full max-w-xs px-4 py-2.5 rounded-xl border border-red-200 dark:border-red-900/50 bg-white dark:bg-neutral-800 text-stone-900 dark:text-white text-sm focus:ring-2 focus:ring-red-400 outline-none placeholder:text-stone-300 dark:placeholder:text-stone-600"
                   />
                 </div>
+
                 <button
-                  onClick={handleDeleteAccount}
+                  type="button"
                   disabled={deleteConfirm !== "DELETE"}
-                  className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition text-sm"
+                  onClick={handleDeleteAccount}
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed bg-red-500 hover:bg-red-600 active:scale-95 text-white"
                 >
-                  Permanently delete account
+                  Delete My Account
                 </button>
               </div>
             </div>
           )}
-        </motion.main>
+
+        </main>
       </div>
     </div>
   );

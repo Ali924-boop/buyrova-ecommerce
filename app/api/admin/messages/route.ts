@@ -1,22 +1,36 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import dbConnect from "@/lib/db";
+import { authOptions } from "@/lib/auth";
+import connectDB from "@/lib/db";
+import Thread from "@/models/Thread";
 import Message from "@/models/Message";
 
-// ── GET /api/admin/messages ───────────────────────────────────────────────────
+async function isAdmin(): Promise<boolean> {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return false;
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim());
+  return adminEmails.includes(session.user.email);
+}
+
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || (session.user as any)?.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!(await isAdmin()))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    await dbConnect();
-    const messages = await Message.find({}).sort({ createdAt: -1 });
-    return NextResponse.json(messages);
+    await connectDB();
+
+    await Message.updateMany(
+      { from: "user", status: "sent" },
+      { $set: { status: "delivered" } }
+    );
+
+    const threads = await Thread.find({ archived: false })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return NextResponse.json({ threads });
   } catch (err) {
-    console.error("Messages GET error:", err);
+    console.error("[GET /api/admin/messages]", err);
     return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
   }
 }

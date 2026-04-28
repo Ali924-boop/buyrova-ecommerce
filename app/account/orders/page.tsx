@@ -1,94 +1,379 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { SessionProvider } from "next-auth/react";
 import Link from "next/link";
-import { FiPackage, FiArrowRight } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  FiPackage, FiArrowRight, FiArrowLeft, FiChevronDown,
+  FiChevronUp, FiShoppingBag, FiClock, FiTruck,
+  FiCheckCircle, FiXCircle, FiRefreshCw,
+} from "react-icons/fi";
+
+interface Product {
+  _id: string;
+  title?: string;
+  price?: number;
+  images?: string[];
+}
+
+interface OrderProduct {
+  quantity: number;
+  product?: Product;
+}
 
 interface Order {
   _id: string;
   total: number;
   status: string;
   createdAt: string;
-  products?: { quantity: number; product?: { title?: string; price?: number } }[];
+  products?: OrderProduct[];
 }
 
-const statusColors: Record<string, string> = {
-  pending: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-  processing: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  shipped: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  delivered: "bg-green-500/10 text-green-400 border-green-500/20",
-  cancelled: "bg-red-500/10 text-red-400 border-red-500/20",
+// ── Status config ─────────────────────────────────────────────────────────────
+
+const STATUS_CFG: Record<string, {
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+  icon: React.ReactNode;
+  step: number;
+}> = {
+  pending: {
+    label: "Pending",
+    color: "text-yellow-500",
+    bg: "bg-yellow-500/10",
+    border: "border-yellow-500/25",
+    icon: <FiClock size={11} />,
+    step: 0,
+  },
+  processing: {
+    label: "Processing",
+    color: "text-blue-400",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/25",
+    icon: <FiRefreshCw size={11} />,
+    step: 1,
+  },
+  shipped: {
+    label: "Shipped",
+    color: "text-purple-400",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/25",
+    icon: <FiTruck size={11} />,
+    step: 2,
+  },
+  delivered: {
+    label: "Delivered",
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/25",
+    icon: <FiCheckCircle size={11} />,
+    step: 3,
+  },
+  cancelled: {
+    label: "Cancelled",
+    color: "text-red-400",
+    bg: "bg-red-500/10",
+    border: "border-red-500/25",
+    icon: <FiXCircle size={11} />,
+    step: -1,
+  },
 };
 
-function OrdersInner() {
-  const [orders, setOrders] = useState<Order[]>([]);
+const TRACK_STEPS = [
+  { key: "pending",    label: "Order Placed",   icon: FiShoppingBag  },
+  { key: "processing", label: "Processing",     icon: FiRefreshCw    },
+  { key: "shipped",    label: "Shipped",         icon: FiTruck        },
+  { key: "delivered",  label: "Delivered",       icon: FiCheckCircle  },
+];
+
+// ── Tracker bar ───────────────────────────────────────────────────────────────
+
+function TrackingBar({ status }: { status: string }) {
+  const cfg = STATUS_CFG[status];
+  const currentStep = cfg?.step ?? 0;
+  const isCancelled = status === "cancelled";
+
+  if (isCancelled) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 rounded-xl
+        bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium">
+        <FiXCircle size={14} /> This order was cancelled.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between relative">
+      {/* connector */}
+      <div className="absolute top-4 left-4 right-4 h-0.5
+        bg-gray-800 dark:bg-gray-800 z-0" />
+      <div
+        className="absolute top-4 left-4 h-0.5 bg-yellow-500 z-0 transition-all duration-500"
+        style={{ width: `${(currentStep / (TRACK_STEPS.length - 1)) * calc}%` }}
+      />
+
+      {TRACK_STEPS.map((step, i) => {
+        const done    = i <= currentStep;
+        const current = i === currentStep;
+        const Icon    = step.icon;
+        return (
+          <div key={step.key} className="flex flex-col items-center gap-2 flex-1 relative z-10">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+              done
+                ? "bg-yellow-500 text-white shadow-md shadow-yellow-500/20"
+                : "bg-gray-800 text-gray-600"
+            } ${current ? "ring-4 ring-yellow-500/20" : ""}`}>
+              <Icon size={13} />
+            </div>
+            <span className={`text-[10px] font-semibold text-center ${
+              done ? "text-yellow-500" : "text-gray-600"
+            }`}>
+              {step.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Workaround for the calc reference above
+const calc = 100;
+
+// ── Order card ────────────────────────────────────────────────────────────────
+
+function OrderCard({ order }: { order: Order }) {
+  const [expanded, setExpanded] = useState(false);
+  const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.pending;
+  const itemCount = order.products?.reduce((s, p) => s + p.quantity, 0) ?? 0;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden
+        hover:border-gray-700 transition-colors duration-200"
+    >
+      {/* ── ROW ── */}
+      <div
+        className="flex items-center gap-4 px-5 py-4 cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {/* Icon */}
+        <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center
+          justify-center shrink-0 text-gray-500">
+          <FiPackage size={18} />
+        </div>
+
+        {/* Meta */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-white font-bold font-mono text-sm">
+              #{order._id.slice(-8).toUpperCase()}
+            </span>
+            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold
+              px-2.5 py-0.5 rounded-full border capitalize
+              ${cfg.color} ${cfg.bg} ${cfg.border}`}>
+              {cfg.icon} {cfg.label}
+            </span>
+          </div>
+          <p className="text-gray-500 text-xs mt-0.5">
+            {new Date(order.createdAt).toLocaleDateString("en-US", {
+              year: "numeric", month: "long", day: "numeric",
+            })}
+            {itemCount > 0 && ` · ${itemCount} item${itemCount !== 1 ? "s" : ""}`}
+          </p>
+        </div>
+
+        {/* Total + chevron */}
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-white font-bold text-sm">
+            ${order.total.toLocaleString()}
+          </span>
+          {expanded
+            ? <FiChevronUp size={14} className="text-gray-600" />
+            : <FiChevronDown size={14} className="text-gray-600" />
+          }
+        </div>
+      </div>
+
+      {/* ── EXPANDED ── */}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="detail"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+
+              {/* Tracking bar */}
+              <div>
+                <p className="text-[11px] font-semibold tracking-widest uppercase
+                  text-gray-600 mb-3">
+                  Order Status
+                </p>
+                <TrackingBar status={order.status} />
+              </div>
+
+              {/* Products */}
+              {order.products && order.products.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold tracking-widest uppercase
+                    text-gray-600 mb-3">
+                    Items
+                  </p>
+                  <div className="space-y-2">
+                    {order.products.map((p, i) => (
+                      <div key={i}
+                        className="flex items-center gap-3 bg-gray-800/50
+                          rounded-xl px-4 py-3">
+                        {/* Product image */}
+                        <div className="w-10 h-10 rounded-lg bg-gray-700
+                          overflow-hidden shrink-0 flex items-center justify-center">
+                          {p.product?.images?.[0] ? (
+                            <img
+                              src={p.product.images[0]}
+                              alt={p.product?.title ?? "Product"}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <FiPackage size={14} className="text-gray-600" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">
+                            {p.product?.title ?? "Product"}
+                          </p>
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            Qty: {p.quantity}
+                            {p.product?.price && ` · $${p.product.price}`}
+                          </p>
+                        </div>
+
+                        {p.product?.price && (
+                          <span className="text-white text-sm font-semibold shrink-0">
+                            ${(p.product.price * p.quantity).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Order total */}
+              <div className="flex items-center justify-between pt-2
+                border-t border-gray-800">
+                <span className="text-gray-500 text-sm">Order Total</span>
+                <span className="text-white font-bold text-base">
+                  ${order.total.toLocaleString()}
+                </span>
+              </div>
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
+export default function OrdersPage() {
+  const [orders,  setOrders]  = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
 
   useEffect(() => {
-    fetch("/api/orders")
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setOrders(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    fetch("/api/orders", { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Unauthorized");
+        return r.json();
+      })
+      .then((d) => {
+        setOrders(Array.isArray(d) ? d : []);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e.message);
+        setLoading(false);
+      });
   }, []);
 
   return (
     <div className="min-h-screen bg-gray-950 px-4 sm:px-6 py-10">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">My Orders</h1>
-          <p className="text-gray-400 text-sm mt-1">{orders.length} order{orders.length !== 1 ? "s" : ""} placed</p>
+      <div className="max-w-3xl mx-auto space-y-6">
+
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Link href="/account/profile"
+            className="w-9 h-9 rounded-xl bg-gray-900 border border-gray-800
+              flex items-center justify-center text-gray-500
+              hover:text-white hover:border-gray-700 transition-all">
+            <FiArrowLeft size={15} />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-white">My Orders</h1>
+            {!loading && (
+              <p className="text-gray-500 text-sm mt-0.5">
+                {orders.length} order{orders.length !== 1 ? "s" : ""}
+              </p>
+            )}
+          </div>
         </div>
 
+        {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="w-8 h-8 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
+          <div className="flex items-center justify-center h-48">
+            <div className="w-8 h-8 border-4 border-yellow-500/20
+              border-t-yellow-500 rounded-full animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl
+            flex flex-col items-center justify-center py-16 gap-3">
+            <FiXCircle size={28} className="text-red-400" />
+            <p className="text-red-400 text-sm font-medium">{error}</p>
+            <Link href="/account/login"
+              className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors">
+              Sign in to view orders →
+            </Link>
           </div>
         ) : orders.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl
+            flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-16 h-16 bg-gray-800 rounded-2xl
+              flex items-center justify-center">
               <FiPackage className="text-gray-600 text-2xl" />
             </div>
-            <p className="text-gray-500 text-sm">No orders yet</p>
-            <Link href="/shop" className="text-yellow-400 hover:text-yellow-300 text-sm flex items-center gap-1 transition">
+            <div className="text-center">
+              <p className="text-gray-400 font-medium">No orders yet</p>
+              <p className="text-gray-600 text-sm mt-1">
+                Your orders will appear here once placed
+              </p>
+            </div>
+            <Link href="/shop"
+              className="flex items-center gap-1.5 text-yellow-500
+                hover:text-yellow-400 text-sm font-medium transition-colors">
               Start Shopping <FiArrowRight size={13} />
             </Link>
           </div>
         ) : (
           <div className="space-y-3">
             {orders.map((order) => (
-              <div key={order._id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-gray-700 transition">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div>
-                    <p className="text-white font-semibold font-mono text-sm">#{order._id.slice(-6).toUpperCase()}</p>
-                    <p className="text-gray-500 text-xs mt-0.5">{new Date(order.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-full border capitalize ${statusColors[order.status] || "bg-gray-800 text-gray-400 border-gray-700"}`}>
-                      {order.status}
-                    </span>
-                    <span className="text-white font-bold text-sm">${order.total.toLocaleString()}</span>
-                  </div>
-                </div>
-                {order.products && order.products.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-gray-800">
-                    <p className="text-gray-500 text-xs">
-                      {order.products.map((p) => p.product?.title || "Product").join(", ")}
-                    </p>
-                  </div>
-                )}
-              </div>
+              <OrderCard key={order._id} order={order} />
             ))}
           </div>
         )}
+
       </div>
     </div>
-  );
-}
-
-export default function OrdersPage() {
-  return (
-    <SessionProvider>
-      <OrdersInner />
-    </SessionProvider>
   );
 }

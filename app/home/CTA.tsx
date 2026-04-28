@@ -35,7 +35,7 @@ const CTA: React.FC = () => {
         transition={{ duration: 0.8 }}
         className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-3 sm:mb-4"
       >
-        Subscribe & Get Exclusive Offers
+        Subscribe &amp; Get Exclusive Offers
       </motion.h2>
 
       {/* Subtitle */}
@@ -51,7 +51,10 @@ const CTA: React.FC = () => {
       {/* Form */}
       <div className="flex flex-col sm:flex-row justify-center max-w-md sm:max-w-lg mx-auto gap-2 sm:gap-0">
 
+        {/* suppressHydrationWarning prevents mismatch caused by browser extensions
+            (LastPass, 1Password, Grammarly, etc.) injecting fdprocessedid on inputs */}
         <input
+          suppressHydrationWarning
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -59,7 +62,10 @@ const CTA: React.FC = () => {
           className="w-full px-4 sm:px-6 py-3 rounded-full sm:rounded-r-none text-gray-900 placeholder-gray-500 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-300"
         />
 
+        {/* motion.button renders a <button> underneath — suppressHydrationWarning
+            must be on the motion component so it passes down to the DOM element */}
         <motion.button
+          suppressHydrationWarning
           onClick={handleSubscribe}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}

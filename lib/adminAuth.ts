@@ -1,16 +1,43 @@
+// lib/adminAuth.ts
+import { NextResponse }     from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions }      from "@/app/api/auth/[...nextauth]/route";
+
+// Extend NextAuth session user type to include role
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id:     string;
+      role?:  string;
+      name?:  string | null;
+      email?: string | null;
+      image?: string | null;
+    };
+  }
+}
 
 export async function requireAdmin() {
   const session = await getServerSession(authOptions);
 
   if (!session?.user) {
-    return { ok: false, status: 401 };
+    return {
+      ok:      false as const,
+      error:   NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      session: null,
+    };
   }
 
   if (session.user.role !== "admin") {
-    return { ok: false, status: 403 };
+    return {
+      ok:      false as const,
+      error:   NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+      session: null,
+    };
   }
 
-  return { ok: true, session };
+  return {
+    ok:      true as const,
+    error:   null,
+    session,
+  };
 }
