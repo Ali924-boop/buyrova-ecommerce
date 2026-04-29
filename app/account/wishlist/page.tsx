@@ -34,11 +34,9 @@ export default function WishlistPage() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  /** Pick the first available image across all variants */
   const getImage = (item: WishlistProduct): string =>
     item.variants?.find((v) => v.images?.[0])?.images?.[0] ?? "/placeholder.jpg";
 
-  /** Use variant price if cheaper, otherwise fall back to product price */
   const getPrice = (item: WishlistProduct): number =>
     item.variants?.[0]?.price || item.price;
 
@@ -91,7 +89,7 @@ export default function WishlistPage() {
           title:    item.title,
           slug:     item.slug,
           price:    getPrice(item),
-          image:    getImage(item),  // ✅ uses variant image
+          image:    getImage(item),
           quantity: 1,
         });
       }
@@ -107,10 +105,10 @@ export default function WishlistPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center transition-colors duration-300">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Loading your wishlist…</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Loading your wishlist…</p>
         </div>
       </div>
     );
@@ -120,20 +118,20 @@ export default function WishlistPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
-        <FiHeart size={32} className="text-gray-700" />
-        <p className="text-gray-400 text-sm">{error}</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center gap-4 transition-colors duration-300">
+        <FiHeart size={32} className="text-gray-300 dark:text-gray-700" />
+        <p className="text-gray-500 dark:text-gray-400 text-sm">{error}</p>
         {error === "Unauthorized" ? (
           <Link
             href="/account/login"
-            className="text-yellow-500 hover:text-yellow-400 text-sm transition"
+            className="text-yellow-600 dark:text-yellow-500 hover:text-yellow-500 dark:hover:text-yellow-400 text-sm transition"
           >
             Sign in to view wishlist →
           </Link>
         ) : (
           <button
             onClick={() => window.location.reload()}
-            className="text-yellow-500 hover:text-yellow-400 text-sm transition"
+            className="text-yellow-600 dark:text-yellow-500 hover:text-yellow-500 dark:hover:text-yellow-400 text-sm transition"
           >
             Try again
           </button>
@@ -145,22 +143,26 @@ export default function WishlistPage() {
   // ── Page ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-950 px-4 sm:px-6 py-10">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 sm:px-6 py-10 transition-colors duration-300">
       <div className="max-w-5xl mx-auto space-y-6">
 
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link
             href="/account/profile"
-            className="w-9 h-9 rounded-xl bg-gray-900 border border-gray-800
-              flex items-center justify-center text-gray-500
-              hover:text-white hover:border-gray-700 transition-all"
+            className="w-9 h-9 rounded-xl bg-white dark:bg-gray-900
+              border border-gray-200 dark:border-gray-800
+              flex items-center justify-center
+              text-gray-400 dark:text-gray-500
+              hover:text-gray-900 dark:hover:text-white
+              hover:border-gray-300 dark:hover:border-gray-700
+              transition-all shadow-sm dark:shadow-none"
           >
             <FiArrowLeft size={15} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">Wishlist</h1>
-            <p className="text-gray-500 text-sm mt-0.5">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Wishlist</h1>
+            <p className="text-gray-400 dark:text-gray-500 text-sm mt-0.5">
               {wishlist.length} saved item{wishlist.length !== 1 ? "s" : ""}
             </p>
           </div>
@@ -168,14 +170,16 @@ export default function WishlistPage() {
 
         {/* Empty state */}
         {wishlist.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl
-            flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
-              <FiHeart className="text-gray-600 text-2xl" />
+          <div className="bg-white dark:bg-gray-900
+            border border-gray-200 dark:border-gray-800
+            rounded-2xl flex flex-col items-center justify-center py-20 gap-4
+            shadow-sm dark:shadow-none">
+            <div className="w-14 h-14 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center">
+              <FiHeart className="text-gray-300 dark:text-gray-600 text-2xl" />
             </div>
             <div className="text-center">
-              <p className="text-gray-400 font-medium">Your wishlist is empty</p>
-              <p className="text-gray-600 text-sm mt-1">
+              <p className="text-gray-600 dark:text-gray-400 font-medium">Your wishlist is empty</p>
+              <p className="text-gray-400 dark:text-gray-600 text-sm mt-1">
                 Save items you love and find them here
               </p>
             </div>
@@ -198,17 +202,17 @@ export default function WishlistPage() {
               return (
                 <div
                   key={item._id}
-                  className={`bg-gray-900 border rounded-2xl overflow-hidden
-                    transition-all duration-200 group
+                  className={`bg-white dark:bg-gray-900 border rounded-2xl overflow-hidden
+                    transition-all duration-200 group shadow-sm dark:shadow-none
                     ${busy
-                      ? "border-gray-700 opacity-60 pointer-events-none"
-                      : "border-gray-800 hover:border-gray-700"
+                      ? "border-gray-200 dark:border-gray-700 opacity-60 pointer-events-none"
+                      : "border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
                     }`}
                 >
                   {/* Image */}
-                  <div className="relative h-48 bg-gray-800">
+                  <div className="relative h-48 bg-gray-100 dark:bg-gray-800">
                     <Image
-                      src={getImage(item)}           // ✅ reads from variants
+                      src={getImage(item)}
                       alt={item.title}
                       fill
                       className="object-cover"
@@ -220,10 +224,12 @@ export default function WishlistPage() {
                       onClick={() => remove(item._id)}
                       disabled={busy}
                       className="absolute top-3 right-3 w-8 h-8
-                        bg-gray-950/80 border border-gray-700 rounded-lg
+                        bg-white/80 dark:bg-gray-950/80
+                        border border-gray-200 dark:border-gray-700 rounded-lg
                         flex items-center justify-center
-                        text-gray-500 hover:text-red-400
-                        hover:border-red-500/40 transition
+                        text-gray-400 dark:text-gray-500
+                        hover:text-red-500 dark:hover:text-red-400
+                        hover:border-red-400/40 dark:hover:border-red-500/40 transition
                         opacity-0 group-hover:opacity-100"
                       aria-label="Remove from wishlist"
                     >
@@ -238,12 +244,13 @@ export default function WishlistPage() {
                   {/* Info */}
                   <div className="p-4">
                     <Link href={`/shop/${item.slug}`}>
-                      <h3 className="text-white text-sm font-semibold truncate hover:text-yellow-400 transition">
+                      <h3 className="text-gray-900 dark:text-white text-sm font-semibold truncate
+                        hover:text-yellow-600 dark:hover:text-yellow-400 transition">
                         {item.title}
                       </h3>
                     </Link>
-                    <p className="text-yellow-400 font-bold mt-1">
-                      ${getPrice(item).toLocaleString()}  {/* ✅ reads from variants */}
+                    <p className="text-yellow-600 dark:text-yellow-400 font-bold mt-1">
+                      ${getPrice(item).toLocaleString()}
                     </p>
 
                     {/* Move to cart */}
