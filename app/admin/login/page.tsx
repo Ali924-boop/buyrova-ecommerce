@@ -1,5 +1,7 @@
 "use client";
 
+// app/admin/login/page.tsx
+
 import React, { useState, useEffect } from "react";
 import { signIn, useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -10,27 +12,26 @@ export default function AdminLoginPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email,        setEmail]        = useState("");
+  const [password,     setPassword]     = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error,        setError]        = useState("");
+  const [loading,      setLoading]      = useState(false);
 
   // ── If already logged in as admin, redirect immediately ───────────────────
-  // FIX: Only redirect if role is confirmed "admin".
-  // Do NOT redirect non-admins away from this page — they should see the form.
+  // FIX: Only redirect confirmed admins. Previously all authenticated users
+  // (including non-admins) were instantly bounced to "/" before seeing the form.
   useEffect(() => {
     if (status === "authenticated") {
       const role = (session?.user as { role?: string })?.role;
       if (role === "admin") {
         router.replace("/admin/dashboard");
       }
-      // ← Removed the else redirect to "/" that was causing non-admins
-      //   (and users with missing role) to be instantly bounced away.
+      // Non-admins stay on this page and see "Access denied" after submitting.
     }
   }, [status, session, router]);
 
-  // ── Handle submit ─────────────────────────────────────────────────────────
+  // ── Handle submit ──────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -38,34 +39,33 @@ export default function AdminLoginPage() {
 
     try {
       const result = await signIn("credentials", {
-        email: email.toLowerCase().trim(),
+        email:    email.toLowerCase().trim(),
         password,
         redirect: false,
       });
 
       if (result?.error) {
-        setError("Invalid credentials or insufficient permissions.");
+        setError("Invalid email or password.");
         toast.error("Invalid credentials!");
         return;
       }
 
-      // ✅ Fetch fresh session to check role
-      const sessionRes = await fetch("/api/auth/session");
+      // Fetch fresh session to read role
+      const sessionRes  = await fetch("/api/auth/session");
       const freshSession = await sessionRes.json();
-      const role = freshSession?.user?.role as string | undefined;
+      const role         = freshSession?.user?.role as string | undefined;
 
       if (role !== "admin") {
-        // Valid user but not admin — sign them out and show error
-        await signOut({ redirect: false }); // FIX: use signOut() from next-auth instead of raw fetch
+        // Valid user but not admin — sign them out immediately
+        await signOut({ redirect: false }); // ✅ proper next-auth signOut
         setError("Access denied. Admin accounts only.");
         toast.error("Access denied!");
         return;
       }
 
       toast.success("Welcome to the Admin Panel!");
-      setTimeout(() => {
-        router.replace("/admin/dashboard");
-      }, 800);
+      setTimeout(() => router.replace("/admin/dashboard"), 800);
+
     } catch {
       setError("Something went wrong. Please try again.");
       toast.error("Something went wrong.");
@@ -74,7 +74,7 @@ export default function AdminLoginPage() {
     }
   };
 
-  // ── Show spinner while session is loading ────────────────────────────────
+  // ── Spinner while session loads ────────────────────────────────────────────
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-slate-900 flex items-center justify-center">
@@ -83,15 +83,14 @@ export default function AdminLoginPage() {
     );
   }
 
-  // FIX: Only return null (blank) if the user is already an admin and actively
-  // being redirected. Previously this returned null for ALL authenticated users,
-  // causing a white screen for non-admins.
+  // FIX: Only return null (blank) if confirmed admin is already being redirected.
+  // Previously this returned null for ALL authenticated users → white screen.
   if (status === "authenticated") {
     const role = (session?.user as { role?: string })?.role;
-    if (role === "admin") return null; // already redirecting to dashboard
+    if (role === "admin") return null;
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-slate-900 flex items-center justify-center px-4">
 
@@ -110,9 +109,7 @@ export default function AdminLoginPage() {
               <FiShield className="text-yellow-400 text-2xl" />
             </div>
             <h1 className="text-2xl font-bold text-white">Admin Access</h1>
-            <p className="text-gray-400 text-sm mt-1">
-              Sign in to BuyRova Admin Panel
-            </p>
+            <p className="text-gray-400 text-sm mt-1">Sign in to BuyRova Admin Panel</p>
           </div>
 
           {/* Error */}

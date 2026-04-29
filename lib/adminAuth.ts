@@ -1,9 +1,9 @@
 // lib/adminAuth.ts
+
 import { NextResponse }     from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions }      from "@/app/api/auth/[...nextauth]/route";
+import { authOptions }      from "@/lib/auth"; // ✅ correct — NOT from the route file
 
-// Extend NextAuth session user type to include role
 declare module "next-auth" {
   interface Session {
     user: {
@@ -35,9 +35,5 @@ export async function requireAdmin() {
     };
   }
 
-  return {
-    ok:      true as const,
-    error:   null,
-    session,
-  };
+  return { ok: true as const, error: null, session };
 }
