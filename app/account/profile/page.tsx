@@ -8,6 +8,7 @@ import {
   FiUser, FiPackage, FiHeart, FiSettings,
   FiMessageSquare, FiChevronRight, FiArrowLeft,
   FiShoppingBag, FiLogOut, FiEdit2, FiShield,
+  FiTrendingUp, FiClock,
 } from "react-icons/fi";
 
 interface Order {
@@ -26,29 +27,47 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 const QUICK_LINKS = [
-  { href: "/account/orders",   icon: <FiPackage size={16} />,     label: "My Orders", descKey: "orders" as const },
-  { href: "/account/wishlist", icon: <FiHeart size={16} />,       label: "Wishlist",  desc: "Saved items"        },
-  { href: "/account/messages", icon: <FiMessageSquare size={16}/>, label: "Messages",  desc: "Support & updates"  },
-  { href: "/account/settings", icon: <FiSettings size={16} />,    label: "Settings",  desc: "Account & privacy"  },
+  { href: "/account/orders",   icon: <FiPackage size={16} />,      label: "My Orders",  desc: "Track & manage"    },
+  { href: "/account/wishlist", icon: <FiHeart size={16} />,        label: "Wishlist",   desc: "Saved items"       },
+  { href: "/account/messages", icon: <FiMessageSquare size={16} />, label: "Messages",  desc: "Support & updates" },
+  { href: "/account/settings", icon: <FiSettings size={16} />,     label: "Settings",   desc: "Account & privacy" },
 ];
+
+// ── Skeleton row for order loading ──────────────────────────────────────────
+function OrderSkeleton() {
+  return (
+    <div className="flex items-center justify-between px-5 py-3.5 animate-pulse">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex-shrink-0" />
+        <div className="space-y-1.5">
+          <div className="h-3 w-24 rounded bg-gray-100 dark:bg-gray-800" />
+          <div className="h-2.5 w-16 rounded bg-gray-100 dark:bg-gray-800" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="h-5 w-20 rounded-full bg-gray-100 dark:bg-gray-800" />
+        <div className="h-3 w-16 rounded bg-gray-100 dark:bg-gray-800" />
+      </div>
+    </div>
+  );
+}
 
 export default function AccountPage() {
   const router = useRouter();
-
-  // ✅ NextAuth session
   const { data: session, status } = useSession();
 
-  const [orders,  setOrders]  = useState<Order[]>([]);
+  const [orders, setOrders]             = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [loggingOut, setLoggingOut]     = useState(false);
 
-  // ✅ Redirect if not authenticated
+  // Redirect if unauthenticated
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/account/login");
     }
   }, [status, router]);
 
-  // ✅ Fetch orders once session is ready
+  // Fetch orders once session is ready
   useEffect(() => {
     if (status !== "authenticated") return;
 
@@ -57,7 +76,7 @@ export default function AccountPage() {
         const res = await fetch("/api/orders", { credentials: "include" });
         if (!res.ok) throw new Error("Failed");
         const data = await res.json();
-        setOrders(Array.isArray(data) ? data : data?.orders ?? []);
+        setOrders(Array.isArray(data) ? data : (data?.orders ?? []));
       } catch {
         setOrders([]);
       } finally {
@@ -68,7 +87,7 @@ export default function AccountPage() {
     fetchOrders();
   }, [status]);
 
-  // ✅ Loading screen while session resolves
+  // Loading screen while session resolves
   if (status === "loading") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -80,10 +99,16 @@ export default function AccountPage() {
     );
   }
 
-  // ✅ Guard — never render without session
   if (!session?.user) return null;
 
-  const user = session.user;
+  const user = session.user as {
+    id:     string;
+    name?:  string | null;
+    email?: string | null;
+    image?: string | null;
+    phone?: string | null;
+    role?:  string | null;
+  };
 
   const initials = user.name
     ? user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -91,14 +116,23 @@ export default function AccountPage() {
 
   const recentOrders = orders.slice(0, 3);
 
+  // Derived stats
+  const totalSpent   = orders.reduce((sum, o) => sum + (o.total ?? 0), 0);
+  const lastOrderDate = orders.length > 0
+    ? new Date(orders[0].createdAt).toLocaleDateString("en-PK", {
+        day: "numeric", month: "short", year: "numeric",
+      })
+    : null;
+
   const handleLogout = async () => {
+    setLoggingOut(true);
     await signOut({ callbackUrl: "/account/login" });
   };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
 
-      {/* Background refresh bar */}
+      {/* Top progress bar while orders load */}
       {ordersLoading && (
         <div className="fixed top-0 left-0 right-0 h-0.5 z-50 bg-yellow-100 dark:bg-yellow-900/30">
           <div className="h-full w-1/3 bg-yellow-500 animate-pulse" />
@@ -114,10 +148,12 @@ export default function AccountPage() {
             {" / "}
             <span className="text-gray-700 dark:text-gray-300 font-medium">Account</span>
           </p>
-          <Link href="/"
+          <Link
+            href="/"
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-yellow-500
               transition font-medium border border-gray-200 dark:border-gray-700
-              px-3 py-1.5 rounded-lg bg-white dark:bg-gray-900">
+              px-3 py-1.5 rounded-lg bg-white dark:bg-gray-900"
+          >
             <FiArrowLeft size={13} /> Back to shop
           </Link>
         </div>
@@ -126,10 +162,14 @@ export default function AccountPage() {
         <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800
           rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center gap-5">
 
+          {/* Avatar */}
           {user.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={user.image} alt={user.name ?? "User"}
-              className="w-16 h-16 rounded-full object-cover ring-2 ring-yellow-300 flex-shrink-0" />
+            <img
+              src={user.image}
+              alt={user.name ?? "User"}
+              className="w-16 h-16 rounded-full object-cover ring-2 ring-yellow-300 flex-shrink-0"
+            />
           ) : (
             <div className="w-16 h-16 rounded-full bg-yellow-500 ring-2 ring-yellow-200
               flex items-center justify-center text-white font-medium text-xl
@@ -140,44 +180,106 @@ export default function AccountPage() {
 
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
-              {user.name}
+              {user.name ?? "Account"}
             </h1>
             <p className="text-sm text-gray-400 mt-0.5 truncate">{user.email}</p>
+
             <div className="flex flex-wrap gap-2 mt-3">
               <span className="text-xs bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700
                 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800
                 rounded-full px-3 py-1 font-medium">
                 BuyRova Member
               </span>
+
               <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600
                 dark:text-gray-400 rounded-full px-3 py-1 font-medium">
                 {orders.length} order{orders.length !== 1 ? "s" : ""}
               </span>
+
               <span className="flex items-center gap-1 text-xs bg-green-50 dark:bg-green-900/20
                 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800
                 rounded-full px-3 py-1 font-medium">
                 <FiShield size={10} /> Verified
               </span>
+
+              {/* Admin badge — only shown when role is admin */}
+              {user.role === "admin" && (
+                <span className="text-xs bg-purple-50 dark:bg-purple-900/20 text-purple-700
+                  dark:text-purple-400 border border-purple-200 dark:border-purple-800
+                  rounded-full px-3 py-1 font-medium">
+                  Admin
+                </span>
+              )}
             </div>
           </div>
 
-          <Link href="/account/settings"
+          <Link
+            href="/account/settings"
             className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl
               border border-gray-200 dark:border-gray-700 text-sm font-medium
               text-gray-700 dark:text-gray-300 hover:border-yellow-400
-              hover:text-yellow-500 transition bg-white dark:bg-gray-900">
+              hover:text-yellow-500 transition bg-white dark:bg-gray-900"
+          >
             <FiEdit2 size={13} /> Edit profile
           </Link>
         </div>
 
+        {/* ── Stats strip ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800
+            rounded-2xl px-5 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500
+              flex items-center justify-center flex-shrink-0">
+              <FiShoppingBag size={15} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-400 font-medium">Total Orders</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white leading-tight">
+                {ordersLoading ? "—" : orders.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800
+            rounded-2xl px-5 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500
+              flex items-center justify-center flex-shrink-0">
+              <FiTrendingUp size={15} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-400 font-medium">Total Spent</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white leading-tight truncate">
+                {ordersLoading ? "—" : `Rs. ${totalSpent.toLocaleString()}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="col-span-2 sm:col-span-1 bg-white dark:bg-gray-900 border border-gray-100
+            dark:border-gray-800 rounded-2xl px-5 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500
+              flex items-center justify-center flex-shrink-0">
+              <FiClock size={15} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-gray-400 font-medium">Last Order</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white leading-tight truncate">
+                {ordersLoading ? "—" : (lastOrderDate ?? "No orders yet")}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* ── Quick links ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {QUICK_LINKS.map(({ href, icon, label, desc, descKey }) => (
-            <Link key={href} href={href}
+          {QUICK_LINKS.map(({ href, icon, label, desc }) => (
+            <Link
+              key={href}
+              href={href}
               className="group bg-white dark:bg-gray-900 rounded-2xl border
                 border-gray-100 dark:border-gray-800 p-5 flex flex-col gap-3
                 hover:border-yellow-300 dark:hover:border-yellow-600
-                hover:-translate-y-0.5 transition-all duration-200">
+                hover:-translate-y-0.5 transition-all duration-200"
+            >
               <div className="w-9 h-9 rounded-xl bg-yellow-50 dark:bg-yellow-900/20
                 text-yellow-500 flex items-center justify-center
                 group-hover:bg-yellow-500 group-hover:text-white transition-colors">
@@ -185,14 +287,12 @@ export default function AccountPage() {
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900 dark:text-white">{label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {descKey === "orders"
-                    ? `${orders.length} order${orders.length !== 1 ? "s" : ""}`
-                    : desc}
-                </p>
+                <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
               </div>
-              <FiChevronRight size={13}
-                className="text-gray-300 group-hover:text-yellow-400 transition-colors mt-auto self-end" />
+              <FiChevronRight
+                size={13}
+                className="text-gray-300 group-hover:text-yellow-400 transition-colors mt-auto self-end"
+              />
             </Link>
           ))}
         </div>
@@ -207,26 +307,33 @@ export default function AccountPage() {
               <h2 className="text-sm font-medium text-gray-900 dark:text-white">Recent Orders</h2>
             </div>
             {orders.length > 3 && (
-              <Link href="/account/orders"
-                className="text-xs text-yellow-500 hover:text-yellow-600 font-medium transition flex items-center gap-1">
+              <Link
+                href="/account/orders"
+                className="text-xs text-yellow-500 hover:text-yellow-600 font-medium transition flex items-center gap-1"
+              >
                 View all <FiChevronRight size={11} />
               </Link>
             )}
           </div>
 
           {ordersLoading ? (
-            <div className="flex items-center justify-center py-14">
-              <div className="w-6 h-6 border-2 border-yellow-200 border-t-yellow-500 rounded-full animate-spin" />
+            <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
+              <OrderSkeleton />
+              <OrderSkeleton />
+              <OrderSkeleton />
             </div>
           ) : recentOrders.length > 0 ? (
             <div className="divide-y divide-gray-50 dark:divide-gray-800/60">
               {recentOrders.map((order) => {
-                const status      = order.status || "processing";
-                const statusStyle = STATUS_STYLES[status] ?? STATUS_STYLES.processing;
+                const orderStatus = (order.status ?? "processing").toLowerCase();
+                const statusStyle = STATUS_STYLES[orderStatus] ?? STATUS_STYLES.processing;
                 return (
-                  <Link key={order._id} href="/account/orders"
+                  <Link
+                    key={order._id}
+                    href={`/account/orders/${order._id}`}
                     className="flex items-center justify-between px-5 py-3.5
-                      hover:bg-gray-50 dark:hover:bg-gray-800/40 transition group">
+                      hover:bg-gray-50 dark:hover:bg-gray-800/40 transition group"
+                  >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
                         <FiShoppingBag size={13} className="text-gray-400" />
@@ -244,10 +351,10 @@ export default function AccountPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${statusStyle}`}>
-                        {status}
+                        {orderStatus}
                       </span>
                       <p className="text-sm font-medium text-gray-900 dark:text-white min-w-[72px] text-right">
-                        Rs. {order.total.toLocaleString()}
+                        Rs.&nbsp;{order.total.toLocaleString()}
                       </p>
                       <FiChevronRight size={13} className="text-gray-300 group-hover:text-yellow-400 transition flex-shrink-0" />
                     </div>
@@ -262,8 +369,10 @@ export default function AccountPage() {
               </div>
               <p className="text-sm font-medium text-gray-500">No orders yet</p>
               <p className="text-xs text-gray-400">Your orders will appear here once you shop</p>
-              <Link href="/shop"
-                className="mt-2 px-5 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-white text-sm font-medium transition">
+              <Link
+                href="/shop"
+                className="mt-2 px-5 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-white text-sm font-medium transition"
+              >
                 Start shopping
               </Link>
             </div>
@@ -279,16 +388,20 @@ export default function AccountPage() {
               </div>
               <h2 className="text-sm font-medium text-gray-900 dark:text-white">Profile Details</h2>
             </div>
-            <Link href="/account/settings"
-              className="text-xs text-yellow-500 hover:text-yellow-600 font-medium transition flex items-center gap-1">
+            <Link
+              href="/account/settings"
+              className="text-xs text-yellow-500 hover:text-yellow-600 font-medium transition flex items-center gap-1"
+            >
               Edit <FiChevronRight size={11} />
             </Link>
           </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-5">
             {[
               { label: "Full name",     value: user.name  ?? "—" },
               { label: "Email address", value: user.email ?? "—" },
-              { label: "Phone", value: user.phone || "—" },
+              { label: "Phone",         value: user.phone ?? "—" },
+              { label: "Role",          value: user.role  ?? "Customer" },
             ].map(({ label, value }) => (
               <div key={label} className="bg-gray-50 dark:bg-gray-800/60 rounded-xl px-4 py-3">
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">{label}</p>
@@ -303,13 +416,28 @@ export default function AccountPage() {
           px-5 py-4 flex items-center justify-between flex-wrap gap-3">
           <div>
             <p className="text-sm font-medium text-gray-900 dark:text-white">Sign out of your account</p>
-            <p className="text-xs text-gray-400 mt-0.5">You'll need to log in again to access your orders and profile.</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              You'll need to log in again to access your orders and profile.
+            </p>
           </div>
-          <button onClick={handleLogout}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
             className="flex items-center gap-2 px-4 py-2 rounded-xl border
               border-red-200 dark:border-red-900/50 text-red-500 text-sm font-medium
-              hover:bg-red-50 dark:hover:bg-red-900/20 transition">
-            <FiLogOut size={14} /> Sign out
+              hover:bg-red-50 dark:hover:bg-red-900/20 transition
+              disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loggingOut ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-red-300 border-t-red-500 rounded-full animate-spin" />
+                Signing out…
+              </>
+            ) : (
+              <>
+                <FiLogOut size={14} /> Sign out
+              </>
+            )}
           </button>
         </div>
 

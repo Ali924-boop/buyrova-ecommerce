@@ -1,30 +1,26 @@
 "use client";
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";               // ✅ NextAuth — consistent with getServerSession
+import { signIn } from "next-auth/react";
 import { toast } from "react-toastify";
 import { FiMail, FiLock, FiEye, FiEyeOff } from "react-icons/fi";
 import { FcGoogle } from "react-icons/fc";
 import { FaFacebookF } from "react-icons/fa";
 
-const Login: React.FC = () => {
+// ── Inner component — uses useSearchParams (must be inside Suspense) ─────────
+const LoginForm: React.FC = () => {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
-  const [form,         setForm]         = useState({ email: "", password: "" });
-  const [loading,      setLoading]      = useState(false);
+  const [form,          setForm]          = useState({ email: "", password: "" });
+  const [loading,       setLoading]       = useState(false);
   const [socialLoading, setSocialLoading] = useState<"google" | "facebook" | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword,  setShowPassword]  = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
   // ── Credentials login ───────────────────────────────────────────────────────
-  // FIX: use NextAuth signIn("credentials") instead of a raw fetch +
-  //      localStorage.setItem("token"). The old approach stored a custom JWT
-  //      that nothing else read — getServerSession (used in /api/orders and the
-  //      profile page) only reads the NextAuth cookie, so the user appeared
-  //      logged-out everywhere after the login redirect.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.email || !form.password) {
@@ -35,13 +31,12 @@ const Login: React.FC = () => {
     setLoading(true);
     try {
       const result = await signIn("credentials", {
-        redirect:  false,          // handle redirect ourselves so we can show toast first
+        redirect:  false,
         email:     form.email,
         password:  form.password,
       });
 
       if (result?.error) {
-        // NextAuth surfaces provider errors as result.error
         toast.error(
           result.error === "CredentialsSignin"
             ? "Invalid email or password."
@@ -51,8 +46,6 @@ const Login: React.FC = () => {
       }
 
       toast.success("Welcome back! 👋");
-
-      // Go to the page the user was trying to reach, or home
       const callbackUrl = searchParams.get("callbackUrl") ?? "/";
       setTimeout(() => router.push(callbackUrl), 800);
 
@@ -67,11 +60,9 @@ const Login: React.FC = () => {
   // ── Social login ────────────────────────────────────────────────────────────
   const handleSocial = async (provider: "google" | "facebook") => {
     setSocialLoading(provider);
-    // redirect: true is fine here — NextAuth handles the OAuth dance
     await signIn(provider, {
       callbackUrl: searchParams.get("callbackUrl") ?? "/",
     });
-    // setSocialLoading(null) is never reached for OAuth (page navigates away)
   };
 
   return (
@@ -110,9 +101,12 @@ const Login: React.FC = () => {
                 focus:outline-none focus:ring-2 focus:ring-yellow-500 transition"
               required autoComplete="current-password"
             />
-            <button type="button" onClick={() => setShowPassword((v) => !v)}
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
               className="absolute top-3.5 right-3 text-gray-400 hover:text-yellow-500 transition"
-              aria-label={showPassword ? "Hide password" : "Show password"}>
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
               {showPassword ? <FiEyeOff /> : <FiEye />}
             </button>
           </div>
@@ -126,10 +120,13 @@ const Login: React.FC = () => {
           </div>
 
           {/* Submit */}
-          <button type="submit" disabled={loading}
+          <button
+            type="submit"
+            disabled={loading}
             className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-semibold
               py-3 rounded-lg transition mt-2 disabled:opacity-60 disabled:cursor-not-allowed
-              flex items-center justify-center gap-2 active:scale-[0.98]">
+              flex items-center justify-center gap-2 active:scale-[0.98]"
+          >
             {loading ? (
               <>
                 <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -153,7 +150,8 @@ const Login: React.FC = () => {
             disabled={!!socialLoading}
             className="flex items-center justify-center gap-2 py-2 rounded-lg
               bg-blue-600 hover:bg-blue-700 text-white font-semibold transition
-              disabled:opacity-60 disabled:cursor-not-allowed">
+              disabled:opacity-60 disabled:cursor-not-allowed"
+          >
             {socialLoading === "facebook"
               ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               : <FaFacebookF />}
@@ -165,7 +163,8 @@ const Login: React.FC = () => {
             className="flex items-center justify-center gap-2 py-2 rounded-lg
               bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700
               text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700
-              transition font-semibold disabled:opacity-60 disabled:cursor-not-allowed">
+              transition font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+          >
             {socialLoading === "google"
               ? <span className="w-4 h-4 border-2 border-gray-400 border-t-gray-900 rounded-full animate-spin" />
               : <FcGoogle />}
@@ -187,4 +186,21 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+// ── Fallback shown during SSR / hydration ────────────────────────────────────
+const LoginFallback: React.FC = () => (
+  <section className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-9 h-9 border-2 border-yellow-200 border-t-yellow-500 rounded-full animate-spin" />
+      <p className="text-sm text-gray-400">Loading…</p>
+    </div>
+  </section>
+);
+
+// ── Default export — wraps LoginForm in Suspense (fixes build error) ─────────
+const LoginPage: React.FC = () => (
+  <Suspense fallback={<LoginFallback />}>
+    <LoginForm />
+  </Suspense>
+);
+
+export default LoginPage;

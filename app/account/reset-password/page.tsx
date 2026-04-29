@@ -1,6 +1,6 @@
 // app/account/reset-password/page.tsx
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FiLock, FiEye, FiEyeOff, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
 import Link from "next/link";
@@ -8,11 +8,11 @@ import Link from "next/link";
 // Password strength scorer
 function getStrength(pw: string): { score: number; label: string; color: string } {
   let score = 0;
-  if (pw.length >= 8)               score++;
-  if (pw.length >= 12)              score++;
-  if (/[A-Z]/.test(pw))            score++;
-  if (/[0-9]/.test(pw))            score++;
-  if (/[^A-Za-z0-9]/.test(pw))    score++;
+  if (pw.length >= 8)             score++;
+  if (pw.length >= 12)            score++;
+  if (/[A-Z]/.test(pw))          score++;
+  if (/[0-9]/.test(pw))          score++;
+  if (/[^A-Za-z0-9]/.test(pw))  score++;
 
   if (score <= 1) return { score, label: "Weak",   color: "bg-red-500"    };
   if (score <= 2) return { score, label: "Fair",   color: "bg-orange-400" };
@@ -20,12 +20,13 @@ function getStrength(pw: string): { score: number; label: string; color: string 
   return              { score, label: "Strong", color: "bg-green-500"  };
 }
 
-export default function ResetPasswordPage() {
+// ── Inner component (uses useSearchParams) ────────────────────────────────
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
 
-  const token = searchParams.get("token")  ?? "";
-  const email = searchParams.get("email")  ?? "";
+  const token = searchParams.get("token") ?? "";
+  const email = searchParams.get("email") ?? "";
 
   const [password,    setPassword]    = useState("");
   const [confirm,     setConfirm]     = useState("");
@@ -38,8 +39,6 @@ export default function ResetPasswordPage() {
   const strength = getStrength(password);
   const mismatch = confirm.length > 0 && password !== confirm;
   const valid    = password.length >= 8 && password === confirm;
-
-  // Guard: if no token/email in URL, show error immediately
   const missingParams = !token || !email;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,7 +62,6 @@ export default function ResetPasswordPage() {
       }
 
       setSuccess(true);
-      // Auto-redirect to login after 2.5 s
       setTimeout(() => router.push("/account/login"), 2500);
     } catch {
       setError("Network error. Please try again.");
@@ -72,7 +70,7 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // ── Invalid link state ────────────────────────────────────────────────────
+  // ── Invalid link state ──────────────────────────────────────────────────
   if (missingParams) {
     return (
       <section className="min-h-screen flex items-center justify-center px-4 bg-gray-100 dark:bg-gray-950">
@@ -93,7 +91,7 @@ export default function ResetPasswordPage() {
     );
   }
 
-  // ── Success state ─────────────────────────────────────────────────────────
+  // ── Success state ───────────────────────────────────────────────────────
   if (success) {
     return (
       <section className="min-h-screen flex items-center justify-center px-4 bg-gray-100 dark:bg-gray-950">
@@ -101,34 +99,27 @@ export default function ResetPasswordPage() {
           <div className="w-16 h-16 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto mb-4">
             <FiCheckCircle size={28} className="text-green-400" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Password updated!
-          </h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Password updated!</h2>
           <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">
             Your password has been changed successfully.
           </p>
-          <p className="text-gray-400 dark:text-gray-500 text-xs">
-            Redirecting to login…
-          </p>
+          <p className="text-gray-400 dark:text-gray-500 text-xs">Redirecting to login…</p>
         </div>
       </section>
     );
   }
 
-  // ── Form state ────────────────────────────────────────────────────────────
+  // ── Form state ──────────────────────────────────────────────────────────
   return (
     <section className="min-h-screen flex items-center justify-center px-4 bg-gray-100 dark:bg-gray-950 transition-colors duration-300">
       <div className="w-full max-w-md rounded-3xl shadow-2xl p-8 border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 transition">
-
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          Set new password
-        </h2>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Set new password</h2>
         <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-          Choose a strong password for <span className="text-gray-900 dark:text-white font-medium">{email}</span>.
+          Choose a strong password for{" "}
+          <span className="text-gray-900 dark:text-white font-medium">{email}</span>.
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-
           {/* New password */}
           <div>
             <div className="relative">
@@ -152,7 +143,6 @@ export default function ResetPasswordPage() {
               </button>
             </div>
 
-            {/* Strength meter */}
             {password.length > 0 && (
               <div className="mt-2 space-y-1">
                 <div className="flex gap-1">
@@ -239,5 +229,18 @@ export default function ResetPasswordPage() {
         </form>
       </div>
     </section>
+  );
+}
+
+// ── Page export — wraps inner component in Suspense ───────────────────────
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-950">
+        <span className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

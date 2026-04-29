@@ -11,6 +11,8 @@ import {
   FiTrash2,
   FiArrowLeft,
   FiPackage,
+  FiShare2,
+  FiCheck,
 } from "react-icons/fi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -27,25 +29,58 @@ interface WishlistItem {
   addedAt: string;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Skeleton Card ────────────────────────────────────────────────────────────
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800 animate-pulse">
+      <div className="aspect-[3/4] bg-gray-100 dark:bg-gray-800" />
+      <div className="p-4 space-y-3">
+        <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full w-3/4" />
+        <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full w-1/2" />
+        <div className="h-9 bg-gray-100 dark:bg-gray-800 rounded-xl mt-2" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+
+interface Toast {
+  id: number;
+  msg: string;
+  type: "success" | "error";
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function WishlistPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [items, setItems] = useState<WishlistItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
-  const [addingToCartId, setAddingToCartId] = useState<string | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [items, setItems]               = useState<WishlistItem[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState<string | null>(null);
+  const [removingId, setRemovingId]     = useState<string | null>(null);
+  const [addingId, setAddingId]         = useState<string | null>(null);
+  const [addedIds, setAddedIds]         = useState<Set<string>>(new Set());
+  const [toasts, setToasts]             = useState<Toast[]>([]);
+  const [toastCounter, setToastCounter] = useState(0);
 
   // ── Auth guard ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.replace("/login?callbackUrl=/account/wishlist");
+      router.replace("/account/login?callbackUrl=/account/wishlist");
     }
   }, [status, router]);
+
+  // ── Toast helper ─────────────────────────────────────────────────────────────
+  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
+    const id = toastCounter + 1;
+    setToastCounter(id);
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  }, [toastCounter]);
 
   // ── Fetch wishlist ───────────────────────────────────────────────────────────
   const fetchWishlist = useCallback(async () => {
@@ -67,24 +102,16 @@ export default function WishlistPage() {
     if (status === "authenticated") fetchWishlist();
   }, [status, fetchWishlist]);
 
-  // ── Toast helper ─────────────────────────────────────────────────────────────
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
-  };
-
-  // ── Remove from wishlist ─────────────────────────────────────────────────────
-  const handleRemove = async (itemId: string) => {
+  // ── Remove ───────────────────────────────────────────────────────────────────
+  const handleRemove = async (itemId: string, name: string) => {
     setRemovingId(itemId);
     try {
-      const res = await fetch(`/api/account/wishlist/${itemId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to remove item");
-      setItems((prev) => prev.filter((i) => i._id !== itemId));
-      showToast("Removed from wishlist");
+      const res = await fetch(`/api/account/wishlist/${itemId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setItems(prev => prev.filter(i => i._id !== itemId));
+      showToast(`"${name}" removed from wishlist`);
     } catch {
-      showToast("Could not remove item. Try again.");
+      showToast("Could not remove item. Try again.", "error");
     } finally {
       setRemovingId(null);
     }
@@ -92,32 +119,51 @@ export default function WishlistPage() {
 
   // ── Add to cart ──────────────────────────────────────────────────────────────
   const handleAddToCart = async (item: WishlistItem) => {
-    if (!item.inStock) return;
-    setAddingToCartId(item._id);
+    if (!item.inStock || addedIds.has(item._id)) return;
+    setAddingId(item._id);
     try {
       const res = await fetch("/api/cart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId: item.productId, quantity: 1 }),
       });
-      if (!res.ok) throw new Error("Failed to add to cart");
-      showToast(`"${item.name}" added to cart`);
+      if (!res.ok) throw new Error();
+      setAddedIds(prev => new Set([...prev, item._id]));
+      showToast(`"${item.name}" added to cart ✓`);
+      setTimeout(() => setAddedIds(prev => { const n = new Set(prev); n.delete(item._id); return n; }), 3000);
     } catch {
-      showToast("Could not add to cart. Try again.");
+      showToast("Could not add to cart. Try again.", "error");
     } finally {
-      setAddingToCartId(null);
+      setAddingId(null);
     }
   };
 
-  // ── Loading state ─────────────────────────────────────────────────────────────
+  // ── Clear all ─────────────────────────────────────────────────────────────────
+  const handleClearAll = async () => {
+    if (!confirm("Remove all items from your wishlist?")) return;
+    try {
+      await fetch("/api/account/wishlist", { method: "DELETE" });
+      setItems([]);
+      showToast("Wishlist cleared");
+    } catch {
+      showToast("Could not clear wishlist.", "error");
+    }
+  };
+
+  // ── States ────────────────────────────────────────────────────────────────────
+
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-zinc-400 text-sm tracking-widest uppercase">
-            Loading wishlist…
-          </p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-20">
+          {/* Header skeleton */}
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 animate-pulse" />
+            <div className="h-6 w-32 bg-gray-200 dark:bg-gray-800 rounded-lg animate-pulse" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+            {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
         </div>
       </div>
     );
@@ -125,91 +171,195 @@ export default function WishlistPage() {
 
   if (status === "unauthenticated") return null;
 
-  // ── Error state ───────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="min-h-screen bg-[#0f0f0f] flex items-center justify-center px-4">
-        <div className="text-center space-y-4">
-          <p className="text-rose-400 text-lg">{error}</p>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center px-4">
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
+            <FiHeart size={24} className="text-red-400" />
+          </div>
+          <p className="text-gray-700 dark:text-gray-300 font-medium">{error}</p>
           <button
             onClick={fetchWishlist}
-            className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full text-sm transition"
+            className="px-6 py-2.5 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl text-sm font-medium hover:opacity-80 transition"
           >
-            Retry
+            Try again
           </button>
         </div>
       </div>
     );
   }
 
+  const inStockCount = items.filter(i => i.inStock).length;
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white">
-      {/* Toast */}
-      {toastMsg && (
-        <div className="fixed top-6 right-6 z-50 bg-zinc-800 border border-zinc-700 text-white text-sm px-5 py-3 rounded-xl shadow-2xl animate-fade-in">
-          {toastMsg}
-        </div>
-      )}
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
 
-      {/* Header */}
-      <div className="border-b border-zinc-800 bg-[#0f0f0f]/80 backdrop-blur sticky top-0 z-40">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
-          <Link
-            href="/account"
-            className="text-zinc-400 hover:text-white transition"
-            aria-label="Back to account"
+      {/* ── Toast stack ── */}
+      <div className="fixed top-5 right-4 sm:right-6 z-50 flex flex-col gap-2 pointer-events-none">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className={`
+              pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium
+              border backdrop-blur-sm transition-all duration-300
+              ${t.type === "success"
+                ? "bg-white/95 dark:bg-gray-900/95 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100"
+                : "bg-red-50/95 dark:bg-red-950/95 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+              }
+            `}
           >
-            <FiArrowLeft size={20} />
-          </Link>
-          <div className="flex items-center gap-2">
-            <FiHeart className="text-rose-500" size={20} />
-            <h1 className="text-lg font-semibold tracking-tight">My Wishlist</h1>
-          </div>
-          {items.length > 0 && (
-            <span className="ml-auto text-xs text-zinc-500">
-              {items.length} {items.length === 1 ? "item" : "items"}
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-xs
+              ${t.type === "success" ? "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400" : "bg-red-100 dark:bg-red-900/40 text-red-500"}`}>
+              {t.type === "success" ? "✓" : "!"}
             </span>
-          )}
-        </div>
+            {t.msg}
+          </div>
+        ))}
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
-        {/* Empty state */}
-        {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-28 gap-6 text-center">
-            <div className="w-20 h-20 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-              <FiHeart size={32} className="text-zinc-600" />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-10 pb-20">
+
+        {/* ── Page header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 sm:mb-10">
+          <div>
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mb-3">
+              <Link href="/" className="hover:text-gray-600 dark:hover:text-gray-300 transition">Home</Link>
+              <span>/</span>
+              <Link href="/account" className="hover:text-gray-600 dark:hover:text-gray-300 transition">Account</Link>
+              <span>/</span>
+              <span className="text-gray-600 dark:text-gray-300">Wishlist</span>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold text-zinc-200">
-                Your wishlist is empty
+
+            <div className="flex items-center gap-3">
+              <Link
+                href="/account"
+                className="w-9 h-9 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800
+                  flex items-center justify-center text-gray-500 dark:text-gray-400
+                  hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-200
+                  transition-all flex-shrink-0"
+                aria-label="Back to account"
+              >
+                <FiArrowLeft size={16} />
+              </Link>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white tracking-tight"
+                  style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                  My Wishlist
+                </h1>
+                {items.length > 0 && (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
+                    {items.length} saved {items.length === 1 ? "item" : "items"}
+                    {inStockCount < items.length && (
+                      <span className="ml-2 text-amber-500 dark:text-amber-400">
+                        · {items.length - inStockCount} out of stock
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          {items.length > 0 && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleClearAll}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl
+                  border border-gray-200 dark:border-gray-800
+                  text-xs font-medium text-gray-500 dark:text-gray-400
+                  hover:border-red-200 dark:hover:border-red-900 hover:text-red-500 dark:hover:text-red-400
+                  bg-white dark:bg-gray-900 transition-all"
+              >
+                <FiTrash2 size={12} />
+                Clear all
+              </button>
+              <Link
+                href="/shop"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl
+                  bg-gray-900 dark:bg-white text-white dark:text-gray-900
+                  text-xs font-medium hover:opacity-85 transition-all"
+              >
+                <FiPackage size={12} />
+                Continue shopping
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* ── Empty state ── */}
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 sm:py-36 gap-6 text-center">
+            <div className="relative">
+              <div className="w-24 h-24 rounded-3xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800
+                flex items-center justify-center shadow-sm">
+                <FiHeart size={36} className="text-gray-200 dark:text-gray-700" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/40
+                flex items-center justify-center text-red-400 text-xs font-bold border-2 border-gray-50 dark:border-gray-950">
+                0
+              </div>
+            </div>
+            <div className="space-y-2 max-w-xs">
+              <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100"
+                style={{ fontFamily: "Georgia, serif" }}>
+                Nothing saved yet
               </h2>
-              <p className="text-zinc-500 text-sm max-w-xs">
-                Save items you love and come back to them anytime.
+              <p className="text-gray-400 dark:text-gray-500 text-sm leading-relaxed">
+                Tap the heart icon on any product to save it here for later.
               </p>
             </div>
             <Link
               href="/shop"
-              className="mt-2 inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-6 py-2.5 rounded-full text-sm font-medium transition"
+              className="mt-2 inline-flex items-center gap-2 bg-gray-900 dark:bg-white
+                hover:opacity-80 text-white dark:text-gray-900 px-7 py-3 rounded-xl
+                text-sm font-medium transition shadow-sm"
             >
               <FiPackage size={15} />
-              Browse Products
+              Explore Products
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {items.map((item) => (
-              <WishlistCard
-                key={item._id}
-                item={item}
-                isRemoving={removingId === item._id}
-                isAddingToCart={addingToCartId === item._id}
-                onRemove={() => handleRemove(item._id)}
-                onAddToCart={() => handleAddToCart(item)}
-              />
-            ))}
-          </div>
+          <>
+            {/* ── Grid ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+              {items.map((item, idx) => (
+                <WishlistCard
+                  key={item._id}
+                  item={item}
+                  index={idx}
+                  isRemoving={removingId === item._id}
+                  isAddingToCart={addingId === item._id}
+                  isAdded={addedIds.has(item._id)}
+                  onRemove={() => handleRemove(item._id, item.name)}
+                  onAddToCart={() => handleAddToCart(item)}
+                />
+              ))}
+            </div>
+
+            {/* ── Add all in-stock to cart ── */}
+            {inStockCount > 1 && (
+              <div className="mt-8 flex justify-center">
+                <button
+                  onClick={async () => {
+                    for (const item of items.filter(i => i.inStock)) {
+                      await handleAddToCart(item);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-8 py-3.5 rounded-2xl
+                    bg-yellow-500 hover:bg-yellow-400 text-white font-medium text-sm
+                    transition-all shadow-md shadow-yellow-200 dark:shadow-yellow-900/20
+                    active:scale-[0.98]"
+                >
+                  <FiShoppingCart size={15} />
+                  Add all {inStockCount} in-stock items to cart
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -220,83 +370,112 @@ export default function WishlistPage() {
 
 interface CardProps {
   item: WishlistItem;
+  index: number;
   isRemoving: boolean;
   isAddingToCart: boolean;
+  isAdded: boolean;
   onRemove: () => void;
   onAddToCart: () => void;
 }
 
-function WishlistCard({
-  item,
-  isRemoving,
-  isAddingToCart,
-  onRemove,
-  onAddToCart,
-}: CardProps) {
+function WishlistCard({ item, index, isRemoving, isAddingToCart, isAdded, onRemove, onAddToCart }: CardProps) {
   const discount =
     item.originalPrice && item.originalPrice > item.price
       ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
       : null;
 
+  const addedAt = new Date(item.addedAt).toLocaleDateString("en-PK", {
+    day: "numeric", month: "short",
+  });
+
   return (
     <div
-      className={`group relative bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden transition-all duration-300 ${
-        isRemoving ? "opacity-40 scale-95" : "hover:border-zinc-700"
-      }`}
+      className={`
+        group relative bg-white dark:bg-gray-900
+        rounded-2xl overflow-hidden
+        border border-gray-100 dark:border-gray-800
+        transition-all duration-300 ease-out
+        ${isRemoving
+          ? "opacity-0 scale-95 pointer-events-none"
+          : "hover:shadow-lg hover:shadow-gray-100 dark:hover:shadow-gray-900/50 hover:-translate-y-0.5"
+        }
+      `}
+      style={{ animationDelay: `${index * 40}ms` }}
     >
-      {/* Image */}
-      <Link href={`/product/${item.slug}`} className="block relative aspect-square">
+      {/* ── Image ── */}
+      <Link href={`/product/${item.slug}`} className="block relative overflow-hidden" style={{ aspectRatio: "3/4" }}>
         <Image
           src={item.image}
           alt={item.name}
           fill
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
         />
+
+        {/* Dark gradient for badge readability */}
+        <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/10 to-transparent pointer-events-none" />
+
         {/* Out of stock overlay */}
         {!item.inStock && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-            <span className="text-xs font-semibold tracking-widest uppercase text-zinc-300 bg-zinc-900/80 px-3 py-1 rounded-full">
+          <div className="absolute inset-0 bg-white/60 dark:bg-gray-900/70 flex items-center justify-center backdrop-blur-[1px]">
+            <span className="text-xs font-semibold tracking-widest uppercase text-gray-500 dark:text-gray-400
+              bg-white dark:bg-gray-900 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700 shadow-sm">
               Out of Stock
             </span>
           </div>
         )}
+
         {/* Discount badge */}
         {discount && (
-          <div className="absolute top-3 left-3 bg-rose-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-            -{discount}%
+          <div className="absolute top-2.5 left-2.5 bg-red-500 text-white text-[10px] font-bold
+            px-2 py-0.5 rounded-full tracking-wide shadow-sm">
+            −{discount}%
           </div>
         )}
+
         {/* Remove button */}
         <button
-          onClick={(e) => {
-            e.preventDefault();
-            onRemove();
-          }}
+          onClick={e => { e.preventDefault(); onRemove(); }}
           disabled={isRemoving}
           aria-label="Remove from wishlist"
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-zinc-900/80 border border-zinc-700 flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-rose-600 hover:border-rose-600 transition-all duration-200"
+          className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full
+            bg-white/90 dark:bg-gray-900/90 border border-gray-200 dark:border-gray-700
+            flex items-center justify-center
+            opacity-0 group-hover:opacity-100
+            hover:bg-red-500 hover:border-red-500 hover:text-white
+            text-gray-400 dark:text-gray-500
+            transition-all duration-200 shadow-sm"
         >
-          <FiTrash2 size={13} />
+          <FiTrash2 size={11} />
         </button>
+
+        {/* Added at */}
+        <div className="absolute bottom-2 left-2.5
+          opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <span className="text-[10px] text-white/80 bg-black/30 px-2 py-0.5 rounded-full backdrop-blur-sm">
+            Saved {addedAt}
+          </span>
+        </div>
       </Link>
 
-      {/* Info */}
-      <div className="p-4 space-y-3">
+      {/* ── Info ── */}
+      <div className="p-3 sm:p-4 space-y-2.5">
         <Link href={`/product/${item.slug}`}>
-          <h3 className="text-sm font-medium text-zinc-100 line-clamp-2 hover:text-white transition leading-snug">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-100
+            line-clamp-2 leading-snug hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
             {item.name}
           </h3>
         </Link>
 
-        {/* Price */}
-        <div className="flex items-center gap-2">
-          <span className="text-base font-semibold text-white">
-            ${item.price.toFixed(2)}
+        {/* Price row */}
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+            Rs {item.price.toLocaleString()}
           </span>
           {item.originalPrice && item.originalPrice > item.price && (
-            <span className="text-xs text-zinc-500 line-through">
-              ${item.originalPrice.toFixed(2)}
+            <span className="text-[11px] text-gray-400 line-through">
+              Rs {item.originalPrice.toLocaleString()}
             </span>
           )}
         </div>
@@ -304,23 +483,30 @@ function WishlistCard({
         {/* Add to cart */}
         <button
           onClick={onAddToCart}
-          disabled={!item.inStock || isAddingToCart}
-          className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-            item.inStock
-              ? "bg-zinc-800 hover:bg-rose-600 text-zinc-200 hover:text-white border border-zinc-700 hover:border-rose-600"
-              : "bg-zinc-800/50 text-zinc-600 border border-zinc-800 cursor-not-allowed"
-          }`}
+          disabled={!item.inStock || isAddingToCart || isAdded}
+          className={`
+            w-full flex items-center justify-center gap-1.5
+            py-2 sm:py-2.5 rounded-xl
+            text-xs sm:text-sm font-medium
+            transition-all duration-200 active:scale-[0.98]
+            ${isAdded
+              ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800"
+              : item.inStock
+              ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:opacity-80 shadow-sm"
+              : "bg-gray-50 dark:bg-gray-800/50 text-gray-300 dark:text-gray-600 border border-gray-100 dark:border-gray-800 cursor-not-allowed"
+            }
+          `}
         >
           {isAddingToCart ? (
-            <div className="w-4 h-4 border border-white border-t-transparent rounded-full animate-spin" />
+            <div className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />
+          ) : isAdded ? (
+            <FiCheck size={13} />
           ) : (
-            <FiShoppingCart size={14} />
+            <FiShoppingCart size={13} />
           )}
-          {isAddingToCart
-            ? "Adding…"
-            : item.inStock
-            ? "Add to Cart"
-            : "Unavailable"}
+          <span>
+            {isAddingToCart ? "Adding…" : isAdded ? "Added!" : item.inStock ? "Add to Cart" : "Unavailable"}
+          </span>
         </button>
       </div>
     </div>
