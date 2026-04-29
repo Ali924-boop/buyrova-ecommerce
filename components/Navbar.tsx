@@ -3,18 +3,13 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSession, signOut } from "next-auth/react";
 import {
   FiShoppingCart, FiSearch, FiMenu, FiX,
   FiChevronDown, FiHeart, FiMessageSquare,
   FiGrid, FiUser, FiLogOut, FiSettings,
   FiPackage, FiTag, FiSun, FiMoon,
 } from "react-icons/fi";
-
-interface UserData {
-  name?: string;
-  email?: string;
-  avatar?: string;
-}
 
 interface CartItem {
   _id: string;
@@ -51,7 +46,6 @@ function useLSCount(key: string, reducer?: (raw: unknown) => number) {
       window.removeEventListener("storage", read);
       clearInterval(interval);
     };
-  // reducer is a stable function reference passed from outside — safe to omit
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -83,18 +77,20 @@ function useTheme() {
 }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
-const Avatar: React.FC<{ userData: UserData; size?: number }> = ({ userData, size = 34 }) => {
-  const initials = userData.name
-    ? userData.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+const Avatar: React.FC<{ name?: string; image?: string; size?: number }> = ({
+  name, image, size = 34,
+}) => {
+  const initials = name
+    ? name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
     : "U";
   const s = `${size}px`;
 
-  if (userData.avatar)
+  if (image)
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={userData.avatar}
-        alt={userData.name || "User"}
+        src={image}
+        alt={name || "User"}
         style={{ width: s, height: s }}
         className="rounded-full ring-2 ring-yellow-400 object-cover"
       />
@@ -116,21 +112,23 @@ const Navbar: React.FC = () => {
   const router   = useRouter();
   const { theme, toggle: toggleTheme } = useTheme();
 
+  // ✅ NextAuth session — replaces localStorage token check
+  const { data: session, status } = useSession();
+  const isLoggedIn = status === "authenticated";
+  const user       = session?.user;
+
   const [showAccount,          setShowAccount]          = useState(false);
   const [mobileMenu,           setMobileMenu]           = useState(false);
   const [showCategories,       setShowCategories]       = useState(false);
   const [showMobileCategories, setShowMobileCategories] = useState(false);
   const [searchQuery,          setSearchQuery]          = useState("");
   const [showMobileSearch,     setShowMobileSearch]     = useState(false);
-  const [isLoggedIn,           setIsLoggedIn]           = useState(false);
-  const [userData,             setUserData]             = useState<UserData>({});
   const [hidden,               setHidden]               = useState(false);
   const [categories,           setCategories]           = useState<string[]>([]);
   const [categoriesLoading,    setCategoriesLoading]    = useState(true);
 
-  // FIX: ref types match the actual DOM elements they are attached to
   const accountRef      = useRef<HTMLDivElement>(null);
-  const categoryRef     = useRef<HTMLLIElement>(null);   // <li> not <div>
+  const categoryRef     = useRef<HTMLLIElement>(null);
   const lastScroll      = useRef(0);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
 
@@ -141,29 +139,7 @@ const Navbar: React.FC = () => {
     return isNaN(n) ? 0 : n;
   });
 
-  // Auth check
-  useEffect(() => {
-    const checkAuth = () => {
-      const token = localStorage.getItem("token");
-      const user  = localStorage.getItem("user");
-      setIsLoggedIn(!!token);
-      if (user) {
-        try { setUserData(JSON.parse(user) as UserData); }
-        catch { setUserData({}); }
-      } else {
-        setUserData({});
-      }
-    };
-    checkAuth();
-    window.addEventListener("storage", checkAuth);
-    const interval = setInterval(checkAuth, 500);
-    return () => {
-      window.removeEventListener("storage", checkAuth);
-      clearInterval(interval);
-    };
-  }, []);
-
-  // Fetch categories from products API
+  // Fetch categories
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -229,13 +205,10 @@ const Navbar: React.FC = () => {
     }
   }, [searchQuery, router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setIsLoggedIn(false);
-    setUserData({});
+  // ✅ NextAuth signOut — no more localStorage.removeItem
+  const handleLogout = async () => {
     setShowAccount(false);
-    router.push("/");
+    await signOut({ callbackUrl: "/" });
   };
 
   const isActive = (href: string) => pathname === href;
@@ -279,7 +252,7 @@ const Navbar: React.FC = () => {
             <li><Link href="/"     className={`px-3 py-2 rounded-lg ${navLink("/")}`}>Home</Link></li>
             <li><Link href="/shop" className={`px-3 py-2 rounded-lg ${navLink("/shop")}`}>Shop</Link></li>
 
-            {/* Categories Dropdown — FIX: ref is HTMLLIElement to match <li> */}
+            {/* Categories Dropdown */}
             <li className="relative" ref={categoryRef}>
               <button
                 onClick={() => setShowCategories(!showCategories)}
@@ -433,14 +406,17 @@ const Navbar: React.FC = () => {
             </button>
 
             {/* Account — desktop */}
-            {isLoggedIn ? (
+            {/* ✅ show skeleton while session loads to avoid flash */}
+            {status === "loading" ? (
+              <div className="hidden md:block w-9 h-9 rounded-full bg-gray-200 dark:bg-gray-700 animate-pulse" />
+            ) : isLoggedIn ? (
               <div className="relative hidden md:block" ref={accountRef}>
                 <button
                   onClick={() => setShowAccount(!showAccount)}
                   className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition"
                   aria-expanded={showAccount}
                 >
-                  <Avatar userData={userData} />
+                  <Avatar name={user?.name ?? ""} image={user?.image ?? ""} />
                   <FiChevronDown size={14} className={`text-gray-400 dark:text-gray-500 transition-transform ${showAccount ? "rotate-180" : ""}`} />
                 </button>
 
@@ -454,10 +430,10 @@ const Navbar: React.FC = () => {
                       className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 shadow-2xl rounded-2xl py-2 z-50 border border-gray-100 dark:border-gray-700"
                     >
                       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
-                        <Avatar userData={userData} size={38} />
+                        <Avatar name={user?.name ?? ""} image={user?.image ?? ""} size={38} />
                         <div className="overflow-hidden">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{userData.name || "User"}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{userData.email || ""}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user?.name || "User"}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{user?.email || ""}</p>
                         </div>
                       </div>
 
@@ -569,10 +545,10 @@ const Navbar: React.FC = () => {
 
                 {isLoggedIn && (
                   <div className="flex items-center gap-3 bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-100 dark:border-yellow-500/20 rounded-2xl px-4 py-3 mb-3">
-                    <Avatar userData={userData} />
+                    <Avatar name={user?.name ?? ""} image={user?.image ?? ""} />
                     <div className="overflow-hidden">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{userData.name || "User"}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{userData.email || ""}</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user?.name || "User"}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{user?.email || ""}</p>
                     </div>
                   </div>
                 )}

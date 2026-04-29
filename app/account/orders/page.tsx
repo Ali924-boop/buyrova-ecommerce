@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -81,15 +82,16 @@ const STATUS_CFG: Record<string, {
 };
 
 const TRACK_STEPS = [
-  { key: "pending",    label: "Order Placed",   icon: FiShoppingBag  },
-  { key: "processing", label: "Processing",     icon: FiRefreshCw    },
-  { key: "shipped",    label: "Shipped",         icon: FiTruck        },
-  { key: "delivered",  label: "Delivered",       icon: FiCheckCircle  },
+  { key: "pending",    label: "Order Placed", icon: FiShoppingBag },
+  { key: "processing", label: "Processing",   icon: FiRefreshCw   },
+  { key: "shipped",    label: "Shipped",      icon: FiTruck       },
+  { key: "delivered",  label: "Delivered",    icon: FiCheckCircle },
 ];
 
 // ── Tracker bar ───────────────────────────────────────────────────────────────
 
 function TrackingBar({ status }: { status: string }) {
+  // BUG FIX #1: Use nullish coalescing with explicit fallback step value (0)
   const cfg = STATUS_CFG[status];
   const currentStep = cfg?.step ?? 0;
   const isCancelled = status === "cancelled";
@@ -103,14 +105,19 @@ function TrackingBar({ status }: { status: string }) {
     );
   }
 
+  // BUG FIX #2: Removed bogus `calc` variable hack. Use the literal 100 directly,
+  // and guard against division by zero (TRACK_STEPS.length - 1 = 3, always safe here).
+  const progressPercent = (currentStep / (TRACK_STEPS.length - 1)) * 100;
+
   return (
     <div className="flex items-center justify-between relative">
-      {/* connector */}
-      <div className="absolute top-4 left-4 right-4 h-0.5
-        bg-gray-800 dark:bg-gray-800 z-0" />
+      {/* Background connector line */}
+      <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-800 z-0" />
+
+      {/* BUG FIX #3: Progress fill — was referencing undefined `calc` variable */}
       <div
         className="absolute top-4 left-4 h-0.5 bg-yellow-500 z-0 transition-all duration-500"
-        style={{ width: `${(currentStep / (TRACK_STEPS.length - 1)) * calc}%` }}
+        style={{ width: `calc(${progressPercent}% * (100% - 2rem) / 100%)` }}
       />
 
       {TRACK_STEPS.map((step, i) => {
@@ -138,13 +145,11 @@ function TrackingBar({ status }: { status: string }) {
   );
 }
 
-// Workaround for the calc reference above
-const calc = 100;
-
 // ── Order card ────────────────────────────────────────────────────────────────
 
 function OrderCard({ order }: { order: Order }) {
   const [expanded, setExpanded] = useState(false);
+  // BUG FIX #4: Fallback to `pending` config for any unknown status string
   const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.pending;
   const itemCount = order.products?.reduce((s, p) => s + p.quantity, 0) ?? 0;
 
@@ -187,10 +192,10 @@ function OrderCard({ order }: { order: Order }) {
           </p>
         </div>
 
-        {/* Total + chevron */}
+        {/* BUG FIX #5: Guard against undefined `total` before calling toLocaleString */}
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-white font-bold text-sm">
-            ${order.total.toLocaleString()}
+            ${(order.total ?? 0).toLocaleString()}
           </span>
           {expanded
             ? <FiChevronUp size={14} className="text-gray-600" />
@@ -233,13 +238,15 @@ function OrderCard({ order }: { order: Order }) {
                       <div key={i}
                         className="flex items-center gap-3 bg-gray-800/50
                           rounded-xl px-4 py-3">
-                        {/* Product image */}
+                        {/* BUG FIX #6: Next.js <Image> requires width + height props */}
                         <div className="w-10 h-10 rounded-lg bg-gray-700
                           overflow-hidden shrink-0 flex items-center justify-center">
                           {p.product?.images?.[0] ? (
-                            <img
+                            <Image
                               src={p.product.images[0]}
                               alt={p.product?.title ?? "Product"}
+                              width={40}
+                              height={40}
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -253,11 +260,14 @@ function OrderCard({ order }: { order: Order }) {
                           </p>
                           <p className="text-gray-500 text-xs mt-0.5">
                             Qty: {p.quantity}
-                            {p.product?.price && ` · $${p.product.price}`}
+                            {/* BUG FIX #7: Safe optional chaining already present,
+                                but ensure price display is safe */}
+                            {p.product?.price != null && ` · $${p.product.price}`}
                           </p>
                         </div>
 
-                        {p.product?.price && (
+                        {/* BUG FIX #8: Guard `price * quantity` with null check */}
+                        {p.product?.price != null && (
                           <span className="text-white text-sm font-semibold shrink-0">
                             ${(p.product.price * p.quantity).toLocaleString()}
                           </span>
@@ -272,8 +282,9 @@ function OrderCard({ order }: { order: Order }) {
               <div className="flex items-center justify-between pt-2
                 border-t border-gray-800">
                 <span className="text-gray-500 text-sm">Order Total</span>
+                {/* BUG FIX #9: Guard total here too */}
                 <span className="text-white font-bold text-base">
-                  ${order.total.toLocaleString()}
+                  ${(order.total ?? 0).toLocaleString()}
                 </span>
               </div>
 
@@ -302,7 +313,8 @@ export default function OrdersPage() {
         setOrders(Array.isArray(d) ? d : []);
         setLoading(false);
       })
-      .catch((e) => {
+      .catch((e: Error) => {
+        // BUG FIX #10: Typed catch parameter as Error for proper message access
         setError(e.message);
         setLoading(false);
       });

@@ -1,57 +1,97 @@
 "use client";
 
-import React, { useState } from "react";
-import { signIn } from "next-auth/react";
+import React, { useState, useEffect } from "react";
+import { signIn, useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-
-import {
-  FiLock,
-  FiMail,
-  FiShield,
-  FiEye,
-  FiEyeOff,
-} from "react-icons/fi";
+import { FiLock, FiMail, FiShield, FiEye, FiEyeOff } from "react-icons/fi";
 
 export default function AdminLoginPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const router = useRouter();
+  // ── If already logged in as admin, redirect immediately ───────────────────
+  // FIX: Only redirect if role is confirmed "admin".
+  // Do NOT redirect non-admins away from this page — they should see the form.
+  useEffect(() => {
+    if (status === "authenticated") {
+      const role = (session?.user as { role?: string })?.role;
+      if (role === "admin") {
+        router.replace("/admin/dashboard");
+      }
+      // ← Removed the else redirect to "/" that was causing non-admins
+      //   (and users with missing role) to be instantly bounced away.
+    }
+  }, [status, session, router]);
 
+  // ── Handle submit ─────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-  email,
-  password,
-  redirect: false,
-});
+    try {
+      const result = await signIn("credentials", {
+        email: email.toLowerCase().trim(),
+        password,
+        redirect: false,
+      });
 
-console.log("LOGIN RESULT:", result);
+      if (result?.error) {
+        setError("Invalid credentials or insufficient permissions.");
+        toast.error("Invalid credentials!");
+        return;
+      }
 
-    console.log(result);
+      // ✅ Fetch fresh session to check role
+      const sessionRes = await fetch("/api/auth/session");
+      const freshSession = await sessionRes.json();
+      const role = freshSession?.user?.role as string | undefined;
 
-    setLoading(false);
+      if (role !== "admin") {
+        // Valid user but not admin — sign them out and show error
+        await signOut({ redirect: false }); // FIX: use signOut() from next-auth instead of raw fetch
+        setError("Access denied. Admin accounts only.");
+        toast.error("Access denied!");
+        return;
+      }
 
-    if (result?.error) {
-      setError("Invalid credentials or insufficient permissions.");
-      toast.error("Invalid credentials!");
-    } else {
-      toast.success("Successfully signed in!");
-
+      toast.success("Welcome to the Admin Panel!");
       setTimeout(() => {
-        router.push("/admin");
-      }, 1000);
+        router.replace("/admin/dashboard");
+      }, 800);
+    } catch {
+      setError("Something went wrong. Please try again.");
+      toast.error("Something went wrong.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // ── Show spinner while session is loading ────────────────────────────────
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-slate-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // FIX: Only return null (blank) if the user is already an admin and actively
+  // being redirected. Previously this returned null for ALL authenticated users,
+  // causing a white screen for non-admins.
+  if (status === "authenticated") {
+    const role = (session?.user as { role?: string })?.role;
+    if (role === "admin") return null; // already redirecting to dashboard
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-slate-900 flex items-center justify-center px-4">
 
@@ -136,14 +176,13 @@ console.log("LOGIN RESULT:", result);
               {loading ? (
                 <>
                   <span className="inline-block w-4 h-4 border-2 border-gray-900/30 border-t-gray-900 rounded-full animate-spin" />
-                  Authenticating...
+                  Authenticating…
                 </>
               ) : (
                 "Sign In to Admin Panel"
               )}
             </button>
           </form>
-          
 
           <p className="text-center text-xs text-gray-600 mt-6">
             Admin access only. Unauthorized access is prohibited.

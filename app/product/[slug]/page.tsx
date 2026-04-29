@@ -29,25 +29,42 @@ const COLOR_MAP: Record<string, string> = {
   purple: "#7f77dd", orange: "#d85a30", brown: "#854f0b",
 };
 
-const addToCartStorage = (product: Product, variant: Variant, size: string, quantity: number) => {
-  const existing = JSON.parse(localStorage.getItem("cart") ?? "[]");
-  const idx = existing.findIndex((i: any) =>
-    i.productId === product._id && i.color === variant.color && i.size === size
+const addToCartStorage = (
+  product: Product,
+  variant: Variant,
+  size: string,
+  quantity: number
+) => {
+  const variantIndex = product.variants.findIndex(
+    (v) => v.color === variant.color
   );
+
+  const existing = JSON.parse(localStorage.getItem("cart") ?? "[]");
+
+  const idx = existing.findIndex(
+    (i: any) =>
+      i._id === product._id &&
+      i.color === variant.color &&
+      i.size === size
+  );
+
   if (idx > -1) {
     existing[idx].quantity += quantity;
   } else {
     existing.push({
-      productId: product._id,
-      title: product.title,
-      slug: product.slug,
-      color: variant.color,
+      _id:          product._id,   // ✅ was missing — checkout needs this
+      productId:    product._id,   // keep for backward compat
+      title:        product.title,
+      slug:         product.slug,
+      color:        variant.color,
       size,
+      variantIndex,                // ✅ was missing — order API needs this
       quantity,
-      price: variant.price ?? product.price,
-      image: variant.images[0],
+      price:        variant.price ?? product.price,
+      image:        variant.images[0],
     });
   }
+
   localStorage.setItem("cart", JSON.stringify(existing));
 };
 

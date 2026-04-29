@@ -16,7 +16,7 @@ export async function GET() {
     await dbConnect();
 
     const wishlist = await Wishlist.findOne({ user: session.user.id })
-      .populate("products", "title price images slug")
+      .populate("products", "title price variants slug") // ✅ variants instead of images
       .lean();
 
     const products = wishlist?.products ?? [];
@@ -50,13 +50,13 @@ export async function POST(req: NextRequest) {
 
     const wishlist = await Wishlist.findOneAndUpdate(
       { user: session.user.id },
-      { $addToSet: { products: productId } }, // $addToSet prevents duplicates
+      { $addToSet: { products: productId } },
       { upsert: true, new: true }
     );
 
     return NextResponse.json({
-      message:  "Added to wishlist",
-      count:    wishlist.products.length,
+      message: "Added to wishlist",
+      count:   wishlist.products.length,
     });
 
   } catch (err) {

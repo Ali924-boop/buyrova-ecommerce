@@ -3,26 +3,46 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link  from "next/link";
 import {
-  FiHeart, FiShoppingCart, FiTrash2,
-  FiArrowLeft, FiLoader,
+  FiHeart, FiShoppingCart, FiTrash2, FiArrowLeft,
 } from "react-icons/fi";
 
-interface WishlistProduct {
-  _id:    string;
-  title:  string;
-  slug:   string;
-  price:  number;
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface Variant {
+  color:  string;
   images: string[];
+  price?: number;
+  stock?: number;
 }
+
+interface WishlistProduct {
+  _id:      string;
+  title:    string;
+  slug:     string;
+  price:    number;
+  variants: Variant[];
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function WishlistPage() {
   const [wishlist, setWishlist] = useState<WishlistProduct[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState("");
-  const [removing, setRemoving] = useState<string | null>(null);  // track which item is being removed
-  const [carting,  setCarting]  = useState<string | null>(null);  // track which item is being carted
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [carting,  setCarting]  = useState<string | null>(null);
 
-  // ── Load wishlist from API ──────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /** Pick the first available image across all variants */
+  const getImage = (item: WishlistProduct): string =>
+    item.variants?.find((v) => v.images?.[0])?.images?.[0] ?? "/placeholder.jpg";
+
+  /** Use variant price if cheaper, otherwise fall back to product price */
+  const getPrice = (item: WishlistProduct): number =>
+    item.variants?.[0]?.price || item.price;
+
+  // ── Load wishlist ────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetch("/api/wishlist", { credentials: "include" })
@@ -36,7 +56,7 @@ export default function WishlistPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Remove from wishlist ────────────────────────────────────────────────
+  // ── Remove ───────────────────────────────────────────────────────────────
 
   const remove = async (productId: string) => {
     setRemoving(productId);
@@ -48,7 +68,6 @@ export default function WishlistPage() {
         body:        JSON.stringify({ productId }),
       });
       if (!res.ok) throw new Error("Failed to remove");
-      // optimistic UI update
       setWishlist((prev) => prev.filter((p) => p._id !== productId));
     } catch {
       alert("Could not remove item. Please try again.");
@@ -57,58 +76,58 @@ export default function WishlistPage() {
     }
   };
 
-  // ── Move to cart ────────────────────────────────────────────────────────
-  // Cart is still localStorage-based here — swap with /api/cart if you have one
+  // ── Move to cart ─────────────────────────────────────────────────────────
 
   const moveToCart = async (item: WishlistProduct) => {
     setCarting(item._id);
     try {
       const cart     = JSON.parse(localStorage.getItem("cart") || "[]");
       const existing = cart.find((i: { _id: string }) => i._id === item._id);
-      if (existing) existing.quantity = (existing.quantity || 1) + 1;
-      else cart.push({
-        _id:      item._id,
-        title:    item.title,
-        slug:     item.slug,
-        price:    item.price,
-        image:    item.images?.[0] ?? "",
-        quantity: 1,
-      });
+      if (existing) {
+        existing.quantity = (existing.quantity || 1) + 1;
+      } else {
+        cart.push({
+          _id:      item._id,
+          title:    item.title,
+          slug:     item.slug,
+          price:    getPrice(item),
+          image:    getImage(item),  // ✅ uses variant image
+          quantity: 1,
+        });
+      }
       localStorage.setItem("cart", JSON.stringify(cart));
       window.dispatchEvent(new Event("storage"));
-
-      // remove from wishlist after moving
       await remove(item._id);
     } finally {
       setCarting(null);
     }
   };
 
-  // ── Loading ─────────────────────────────────────────────────────────────
+  // ── Loading ──────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-yellow-500/20
-            border-t-yellow-500 rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
           <p className="text-sm text-gray-500">Loading your wishlist…</p>
         </div>
       </div>
     );
   }
 
-  // ── Error ───────────────────────────────────────────────────────────────
+  // ── Error ────────────────────────────────────────────────────────────────
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center
-        justify-center gap-4">
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
         <FiHeart size={32} className="text-gray-700" />
         <p className="text-gray-400 text-sm">{error}</p>
         {error === "Unauthorized" ? (
-          <Link href="/account/login"
-            className="text-yellow-500 hover:text-yellow-400 text-sm transition">
+          <Link
+            href="/account/login"
+            className="text-yellow-500 hover:text-yellow-400 text-sm transition"
+          >
             Sign in to view wishlist →
           </Link>
         ) : (
@@ -123,7 +142,7 @@ export default function WishlistPage() {
     );
   }
 
-  // ── Page ────────────────────────────────────────────────────────────────
+  // ── Page ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-950 px-4 sm:px-6 py-10">
@@ -131,10 +150,12 @@ export default function WishlistPage() {
 
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Link href="/account/profile"
+          <Link
+            href="/account/profile"
             className="w-9 h-9 rounded-xl bg-gray-900 border border-gray-800
               flex items-center justify-center text-gray-500
-              hover:text-white hover:border-gray-700 transition-all">
+              hover:text-white hover:border-gray-700 transition-all"
+          >
             <FiArrowLeft size={15} />
           </Link>
           <div>
@@ -149,8 +170,7 @@ export default function WishlistPage() {
         {wishlist.length === 0 ? (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl
             flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-14 h-14 bg-gray-800 rounded-2xl
-              flex items-center justify-center">
+            <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
               <FiHeart className="text-gray-600 text-2xl" />
             </div>
             <div className="text-center">
@@ -159,9 +179,11 @@ export default function WishlistPage() {
                 Save items you love and find them here
               </p>
             </div>
-            <Link href="/shop"
+            <Link
+              href="/shop"
               className="px-5 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400
-                text-gray-900 text-sm font-bold transition">
+                text-gray-900 text-sm font-bold transition"
+            >
               Browse Products
             </Link>
           </div>
@@ -174,18 +196,19 @@ export default function WishlistPage() {
               const busy       = isRemoving || isCarting;
 
               return (
-                <div key={item._id}
+                <div
+                  key={item._id}
                   className={`bg-gray-900 border rounded-2xl overflow-hidden
                     transition-all duration-200 group
                     ${busy
                       ? "border-gray-700 opacity-60 pointer-events-none"
                       : "border-gray-800 hover:border-gray-700"
-                    }`}>
-
+                    }`}
+                >
                   {/* Image */}
                   <div className="relative h-48 bg-gray-800">
                     <Image
-                      src={item.images?.[0] || "/placeholder.jpg"}
+                      src={getImage(item)}           // ✅ reads from variants
                       alt={item.title}
                       fill
                       className="object-cover"
@@ -204,23 +227,23 @@ export default function WishlistPage() {
                         opacity-0 group-hover:opacity-100"
                       aria-label="Remove from wishlist"
                     >
-                      {isRemoving
-                        ? <div className="w-3 h-3 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
-                        : <FiTrash2 size={13} />
-                      }
+                      {isRemoving ? (
+                        <div className="w-3 h-3 border-2 border-red-400/30 border-t-red-400 rounded-full animate-spin" />
+                      ) : (
+                        <FiTrash2 size={13} />
+                      )}
                     </button>
                   </div>
 
                   {/* Info */}
                   <div className="p-4">
                     <Link href={`/shop/${item.slug}`}>
-                      <h3 className="text-white text-sm font-semibold truncate
-                        hover:text-yellow-400 transition">
+                      <h3 className="text-white text-sm font-semibold truncate hover:text-yellow-400 transition">
                         {item.title}
                       </h3>
                     </Link>
                     <p className="text-yellow-400 font-bold mt-1">
-                      ${item.price.toLocaleString()}
+                      ${getPrice(item).toLocaleString()}  {/* ✅ reads from variants */}
                     </p>
 
                     {/* Move to cart */}
@@ -232,8 +255,7 @@ export default function WishlistPage() {
                         text-gray-900 font-bold py-2 rounded-lg transition"
                     >
                       {isCarting ? (
-                        <div className="w-3 h-3 border-2 border-gray-900/30
-                          border-t-gray-900 rounded-full animate-spin" />
+                        <div className="w-3 h-3 border-2 border-gray-900/30 border-t-gray-900 rounded-full animate-spin" />
                       ) : (
                         <><FiShoppingCart size={12} /> Move to Cart</>
                       )}
