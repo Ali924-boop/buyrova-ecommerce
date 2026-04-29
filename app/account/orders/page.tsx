@@ -41,7 +41,7 @@ const STATUS_CFG: Record<string, {
 }> = {
   pending: {
     label: "Pending",
-    color: "text-yellow-500",
+    color: "text-yellow-600 dark:text-yellow-500",
     bg: "bg-yellow-500/10",
     border: "border-yellow-500/25",
     icon: <FiClock size={11} />,
@@ -49,7 +49,7 @@ const STATUS_CFG: Record<string, {
   },
   processing: {
     label: "Processing",
-    color: "text-blue-400",
+    color: "text-blue-600 dark:text-blue-400",
     bg: "bg-blue-500/10",
     border: "border-blue-500/25",
     icon: <FiRefreshCw size={11} />,
@@ -57,7 +57,7 @@ const STATUS_CFG: Record<string, {
   },
   shipped: {
     label: "Shipped",
-    color: "text-purple-400",
+    color: "text-purple-600 dark:text-purple-400",
     bg: "bg-purple-500/10",
     border: "border-purple-500/25",
     icon: <FiTruck size={11} />,
@@ -65,7 +65,7 @@ const STATUS_CFG: Record<string, {
   },
   delivered: {
     label: "Delivered",
-    color: "text-emerald-400",
+    color: "text-emerald-600 dark:text-emerald-400",
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/25",
     icon: <FiCheckCircle size={11} />,
@@ -73,7 +73,7 @@ const STATUS_CFG: Record<string, {
   },
   cancelled: {
     label: "Cancelled",
-    color: "text-red-400",
+    color: "text-red-600 dark:text-red-400",
     bg: "bg-red-500/10",
     border: "border-red-500/25",
     icon: <FiXCircle size={11} />,
@@ -91,7 +91,6 @@ const TRACK_STEPS = [
 // ── Tracker bar ───────────────────────────────────────────────────────────────
 
 function TrackingBar({ status }: { status: string }) {
-  // BUG FIX #1: Use nullish coalescing with explicit fallback step value (0)
   const cfg = STATUS_CFG[status];
   const currentStep = cfg?.step ?? 0;
   const isCancelled = status === "cancelled";
@@ -99,22 +98,21 @@ function TrackingBar({ status }: { status: string }) {
   if (isCancelled) {
     return (
       <div className="flex items-center gap-2 px-4 py-3 rounded-xl
-        bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium">
+        bg-red-500/10 border border-red-500/20
+        text-red-600 dark:text-red-400 text-sm font-medium">
         <FiXCircle size={14} /> This order was cancelled.
       </div>
     );
   }
 
-  // BUG FIX #2: Removed bogus `calc` variable hack. Use the literal 100 directly,
-  // and guard against division by zero (TRACK_STEPS.length - 1 = 3, always safe here).
   const progressPercent = (currentStep / (TRACK_STEPS.length - 1)) * 100;
 
   return (
     <div className="flex items-center justify-between relative">
       {/* Background connector line */}
-      <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-800 z-0" />
+      <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-200 dark:bg-gray-800 z-0" />
 
-      {/* BUG FIX #3: Progress fill — was referencing undefined `calc` variable */}
+      {/* Progress fill */}
       <div
         className="absolute top-4 left-4 h-0.5 bg-yellow-500 z-0 transition-all duration-500"
         style={{ width: `calc(${progressPercent}% * (100% - 2rem) / 100%)` }}
@@ -129,12 +127,14 @@ function TrackingBar({ status }: { status: string }) {
             <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
               done
                 ? "bg-yellow-500 text-white shadow-md shadow-yellow-500/20"
-                : "bg-gray-800 text-gray-600"
+                : "bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600"
             } ${current ? "ring-4 ring-yellow-500/20" : ""}`}>
               <Icon size={13} />
             </div>
             <span className={`text-[10px] font-semibold text-center ${
-              done ? "text-yellow-500" : "text-gray-600"
+              done
+                ? "text-yellow-600 dark:text-yellow-500"
+                : "text-gray-400 dark:text-gray-600"
             }`}>
               {step.label}
             </span>
@@ -149,7 +149,6 @@ function TrackingBar({ status }: { status: string }) {
 
 function OrderCard({ order }: { order: Order }) {
   const [expanded, setExpanded] = useState(false);
-  // BUG FIX #4: Fallback to `pending` config for any unknown status string
   const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.pending;
   const itemCount = order.products?.reduce((s, p) => s + p.quantity, 0) ?? 0;
 
@@ -158,8 +157,9 @@ function OrderCard({ order }: { order: Order }) {
       layout
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden
-        hover:border-gray-700 transition-colors duration-200"
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800
+        rounded-2xl overflow-hidden hover:border-gray-300 dark:hover:border-gray-700
+        transition-colors duration-200 shadow-sm dark:shadow-none"
     >
       {/* ── ROW ── */}
       <div
@@ -167,15 +167,15 @@ function OrderCard({ order }: { order: Order }) {
         onClick={() => setExpanded((v) => !v)}
       >
         {/* Icon */}
-        <div className="w-10 h-10 rounded-xl bg-gray-800 flex items-center
-          justify-center shrink-0 text-gray-500">
+        <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center
+          justify-center shrink-0 text-gray-400 dark:text-gray-500">
           <FiPackage size={18} />
         </div>
 
         {/* Meta */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white font-bold font-mono text-sm">
+            <span className="text-gray-900 dark:text-white font-bold font-mono text-sm">
               #{order._id.slice(-8).toUpperCase()}
             </span>
             <span className={`inline-flex items-center gap-1 text-[11px] font-semibold
@@ -184,7 +184,7 @@ function OrderCard({ order }: { order: Order }) {
               {cfg.icon} {cfg.label}
             </span>
           </div>
-          <p className="text-gray-500 text-xs mt-0.5">
+          <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">
             {new Date(order.createdAt).toLocaleDateString("en-US", {
               year: "numeric", month: "long", day: "numeric",
             })}
@@ -192,14 +192,14 @@ function OrderCard({ order }: { order: Order }) {
           </p>
         </div>
 
-        {/* BUG FIX #5: Guard against undefined `total` before calling toLocaleString */}
+        {/* Total + chevron */}
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-white font-bold text-sm">
+          <span className="text-gray-900 dark:text-white font-bold text-sm">
             ${(order.total ?? 0).toLocaleString()}
           </span>
           {expanded
-            ? <FiChevronUp size={14} className="text-gray-600" />
-            : <FiChevronDown size={14} className="text-gray-600" />
+            ? <FiChevronUp size={14} className="text-gray-400 dark:text-gray-600" />
+            : <FiChevronDown size={14} className="text-gray-400 dark:text-gray-600" />
           }
         </div>
       </div>
@@ -215,12 +215,12 @@ function OrderCard({ order }: { order: Order }) {
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+            <div className="px-5 pb-5 space-y-4 border-t border-gray-100 dark:border-gray-800 pt-4">
 
               {/* Tracking bar */}
               <div>
                 <p className="text-[11px] font-semibold tracking-widest uppercase
-                  text-gray-600 mb-3">
+                  text-gray-400 dark:text-gray-600 mb-3">
                   Order Status
                 </p>
                 <TrackingBar status={order.status} />
@@ -230,16 +230,15 @@ function OrderCard({ order }: { order: Order }) {
               {order.products && order.products.length > 0 && (
                 <div>
                   <p className="text-[11px] font-semibold tracking-widest uppercase
-                    text-gray-600 mb-3">
+                    text-gray-400 dark:text-gray-600 mb-3">
                     Items
                   </p>
                   <div className="space-y-2">
                     {order.products.map((p, i) => (
                       <div key={i}
-                        className="flex items-center gap-3 bg-gray-800/50
+                        className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50
                           rounded-xl px-4 py-3">
-                        {/* BUG FIX #6: Next.js <Image> requires width + height props */}
-                        <div className="w-10 h-10 rounded-lg bg-gray-700
+                        <div className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-700
                           overflow-hidden shrink-0 flex items-center justify-center">
                           {p.product?.images?.[0] ? (
                             <Image
@@ -250,25 +249,22 @@ function OrderCard({ order }: { order: Order }) {
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <FiPackage size={14} className="text-gray-600" />
+                            <FiPackage size={14} className="text-gray-400 dark:text-gray-600" />
                           )}
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-medium truncate">
+                          <p className="text-gray-900 dark:text-white text-sm font-medium truncate">
                             {p.product?.title ?? "Product"}
                           </p>
-                          <p className="text-gray-500 text-xs mt-0.5">
+                          <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">
                             Qty: {p.quantity}
-                            {/* BUG FIX #7: Safe optional chaining already present,
-                                but ensure price display is safe */}
                             {p.product?.price != null && ` · $${p.product.price}`}
                           </p>
                         </div>
 
-                        {/* BUG FIX #8: Guard `price * quantity` with null check */}
                         {p.product?.price != null && (
-                          <span className="text-white text-sm font-semibold shrink-0">
+                          <span className="text-gray-900 dark:text-white text-sm font-semibold shrink-0">
                             ${(p.product.price * p.quantity).toLocaleString()}
                           </span>
                         )}
@@ -280,10 +276,9 @@ function OrderCard({ order }: { order: Order }) {
 
               {/* Order total */}
               <div className="flex items-center justify-between pt-2
-                border-t border-gray-800">
-                <span className="text-gray-500 text-sm">Order Total</span>
-                {/* BUG FIX #9: Guard total here too */}
-                <span className="text-white font-bold text-base">
+                border-t border-gray-100 dark:border-gray-800">
+                <span className="text-gray-500 dark:text-gray-400 text-sm">Order Total</span>
+                <span className="text-gray-900 dark:text-white font-bold text-base">
                   ${(order.total ?? 0).toLocaleString()}
                 </span>
               </div>
@@ -314,28 +309,31 @@ export default function OrdersPage() {
         setLoading(false);
       })
       .catch((e: Error) => {
-        // BUG FIX #10: Typed catch parameter as Error for proper message access
         setError(e.message);
         setLoading(false);
       });
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-950 px-4 sm:px-6 py-10">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 sm:px-6 py-10 transition-colors duration-300">
       <div className="max-w-3xl mx-auto space-y-6">
 
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/account/profile"
-            className="w-9 h-9 rounded-xl bg-gray-900 border border-gray-800
-              flex items-center justify-center text-gray-500
-              hover:text-white hover:border-gray-700 transition-all">
+            className="w-9 h-9 rounded-xl bg-white dark:bg-gray-900
+              border border-gray-200 dark:border-gray-800
+              flex items-center justify-center
+              text-gray-400 dark:text-gray-500
+              hover:text-gray-900 dark:hover:text-white
+              hover:border-gray-300 dark:hover:border-gray-700
+              transition-all shadow-sm dark:shadow-none">
             <FiArrowLeft size={15} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">My Orders</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Orders</h1>
             {!loading && (
-              <p className="text-gray-500 text-sm mt-0.5">
+              <p className="text-gray-400 dark:text-gray-500 text-sm mt-0.5">
                 {orders.length} order{orders.length !== 1 ? "s" : ""}
               </p>
             )}
@@ -351,29 +349,33 @@ export default function OrdersPage() {
         ) : error ? (
           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl
             flex flex-col items-center justify-center py-16 gap-3">
-            <FiXCircle size={28} className="text-red-400" />
-            <p className="text-red-400 text-sm font-medium">{error}</p>
+            <FiXCircle size={28} className="text-red-500 dark:text-red-400" />
+            <p className="text-red-600 dark:text-red-400 text-sm font-medium">{error}</p>
             <Link href="/account/login"
-              className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors">
+              className="text-xs text-yellow-600 dark:text-yellow-500
+                hover:text-yellow-500 dark:hover:text-yellow-400 transition-colors">
               Sign in to view orders →
             </Link>
           </div>
         ) : orders.length === 0 ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl
-            flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-16 h-16 bg-gray-800 rounded-2xl
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800
+            rounded-2xl flex flex-col items-center justify-center py-20 gap-4
+            shadow-sm dark:shadow-none">
+            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl
               flex items-center justify-center">
-              <FiPackage className="text-gray-600 text-2xl" />
+              <FiPackage className="text-gray-400 dark:text-gray-600 text-2xl" />
             </div>
             <div className="text-center">
-              <p className="text-gray-400 font-medium">No orders yet</p>
-              <p className="text-gray-600 text-sm mt-1">
+              <p className="text-gray-600 dark:text-gray-400 font-medium">No orders yet</p>
+              <p className="text-gray-400 dark:text-gray-600 text-sm mt-1">
                 Your orders will appear here once placed
               </p>
             </div>
             <Link href="/shop"
-              className="flex items-center gap-1.5 text-yellow-500
-                hover:text-yellow-400 text-sm font-medium transition-colors">
+              className="flex items-center gap-1.5
+                text-yellow-600 dark:text-yellow-500
+                hover:text-yellow-500 dark:hover:text-yellow-400
+                text-sm font-medium transition-colors">
               Start Shopping <FiArrowRight size={13} />
             </Link>
           </div>
